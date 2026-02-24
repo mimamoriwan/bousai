@@ -19,6 +19,10 @@ const Layout = () => {
             </main>
 
             <nav className="bottom-nav">
+                <Link to="/profile" className={isActive('/profile')}>
+                    <span className="nav-icon">🐾</span>
+                    <span className="nav-label">マイページ</span>
+                </Link>
                 <Link to="/" className={isActive('/')}>
                     <span className="nav-icon">🗺️</span>
                     <span className="nav-label">マップ</span>
@@ -26,10 +30,6 @@ const Layout = () => {
                 <Link to="/guide" className={isActive('/guide')}>
                     <span className="nav-icon">📖</span>
                     <span className="nav-label">ガイド</span>
-                </Link>
-                <Link to="/profile" className={isActive('/profile')}>
-                    <span className="nav-icon">🐾</span>
-                    <span className="nav-label">マイページ</span>
                 </Link>
             </nav>
         </div>
