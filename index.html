@@ -1,16 +1,64 @@
 <!doctype html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>つくば市ペット防災</title>
-    <meta name="description" content="茨城県つくば市のペット飼い主向け防災ハンドブック・避難所マップアプリ" />
-    <meta name="theme-color" content="#FF6F00" />
-    <link rel="apple-touch-icon" href="/icon.svg">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>みまもりWAN</title>
+  <meta name="apple-mobile-web-app-title" content="みまもりWAN">
+  <meta name="description" content="みんなの歩幅で作る、地域の安全とペットに優しいまちづくりアプリ" />
+  <meta name="theme-color" content="#FF6F00" />
+  <style>
+    /* Initial loading spinner colors */
+    :root {
+      --loader-color: #FF6F00;
+      /* Mimamori WAN theme orange */
+    }
+
+    .initial-loader-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      width: 100vw;
+      background-color: #fcfcfc;
+      font-family: sans-serif;
+    }
+
+    .initial-spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid rgba(255, 111, 0, 0.2);
+      border-radius: 50%;
+      border-top-color: var(--loader-color);
+      animation: spin 1s ease-in-out infinite;
+      margin-bottom: 20px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .initial-loading-text {
+      color: var(--loader-color);
+      font-size: 1.1rem;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root">
+    <div class="initial-loader-container">
+      <div class="initial-spinner"></div>
+      <div class="initial-loading-text">🐾 みまもりWAN 読み込み中...</div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>

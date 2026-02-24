@@ -60,13 +60,6 @@ const resolvedIcon = L.divIcon({
     iconAnchor: [18, 18]
 });
 
-// Device ID tracking for Thanks feature without full auth
-let localDeviceId = localStorage.getItem('bousai_device_id');
-if (!localDeviceId) {
-    localDeviceId = 'device_' + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem('bousai_device_id', localDeviceId);
-}
-
 const LocationMarker = () => {
     const [position, setPosition] = useState(null);
     const map = useMap();
@@ -141,20 +134,15 @@ const MapPage = () => {
     const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null });
     const [isProcessingImage, setIsProcessingImage] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false); // For Firebase Submit Loading state
-    const { currentUser } = useAuth();
+    const { currentUser, memberNumber } = useAuth();
     const navigate = useNavigate();
 
     const mapRef = useRef(null);
     const markerRefs = useRef(new Map());
     const [activePostId, setActivePostId] = useState(null);
 
+    // Anonymous auth handles identity now, no need to block UI actions
     const requireAuth = (actionName) => {
-        if (!currentUser) {
-            if (window.confirm(`${actionName}を利用するにはログインが必要です。マイページを開いてログインしますか？`)) {
-                navigate('/profile');
-            }
-            return false;
-        }
         return true;
     };
 
@@ -169,8 +157,8 @@ const MapPage = () => {
 
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                // Avoid showing pins older than 48 hours for active freshness
-                if (data.timestamp && (now - data.timestamp > fortyEightHours)) {
+                // Avoid showing pins older than 48 hours for active freshness, EXCEPT for disaster/shelter pins
+                if (data.type !== 'shelter' && data.timestamp && (now - data.timestamp > fortyEightHours)) {
                     return; // Skip this pin
                 }
                 pins.push({ id: doc.id, ...data });
@@ -229,7 +217,8 @@ const MapPage = () => {
                 imageUrl: imageUrl, // Will be null if no photo attached
                 imagePath: imagePath,
                 resolved: false,
-                thanks: [] // Array of device IDs
+                thanks: [], // Array of device IDs
+                memberNumber: currentUser && !currentUser.isAnonymous && memberNumber ? memberNumber : null
             };
 
             await addDoc(collection(db, "map_pins"), newPostData);
@@ -271,14 +260,15 @@ const MapPage = () => {
     };
 
     const handleThanks = async (postId, currentThanks) => {
-        if (!requireAuth('「💖 ありがとう」')) return;
+        if (!currentUser) return; // Anonymous users are also allowed
+
         const postRef = doc(db, 'map_pins', postId);
-        const hasThanked = currentThanks?.includes(localDeviceId);
+        const hasThanked = currentThanks?.includes(currentUser.uid);
         try {
             if (hasThanked) {
-                await updateDoc(postRef, { thanks: arrayRemove(localDeviceId) });
+                await updateDoc(postRef, { thanks: arrayRemove(currentUser.uid) });
             } else {
-                await updateDoc(postRef, { thanks: arrayUnion(localDeviceId) });
+                await updateDoc(postRef, { thanks: arrayUnion(currentUser.uid) });
             }
         } catch (error) {
             console.error("Error updating thanks: ", error);
@@ -324,6 +314,17 @@ const MapPage = () => {
             }
         }
     };
+
+    const filteredPosts = userPosts.filter(post => {
+        // Exclude shelter posts completely unless explicitly filtering for it
+        if (post.type === 'shelter' && filter !== 'shelter') return false;
+
+        if (filter === 'all') return !post.resolved; // show everything else that is unresolved
+        if (filter === 'resolved') return post.resolved; // show only resolved posts
+        if (post.resolved) return false; // Hide resolved from other specific filters
+        if (filter === 'walk') return post.type === 'walk' || post.type === 'useful';
+        return post.type === filter;
+    });
 
     return (
         <div className="map-page" style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -460,7 +461,7 @@ const MapPage = () => {
                     </div>
                 )}
 
-                <MapContainer center={position} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%' }} ref={mapRef}>
+                <MapContainer center={position} zoom={15} scrollWheelZoom={true} style={{ height: '100%', width: '100%' }} ref={mapRef}>
                     <TileLayer
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -469,7 +470,7 @@ const MapPage = () => {
                     <MapClickHandler isPostMode={isPostMode} onMapClick={handleMapClick} />
 
                     {/* Official Shelters */}
-                    {shelters.filter(s => filter === 'all' || filter === 'shelter').map(shelter => (
+                    {shelters.filter(s => filter === 'shelter').map(shelter => (
                         <Marker key={shelter.id} position={[shelter.lat, shelter.lng]}>
                             <Popup>
                                 <strong>{shelter.name}</strong><br />
@@ -491,14 +492,8 @@ const MapPage = () => {
                     ))}
 
                     {/* User Posts */}
-                    {userPosts.filter(post => {
-                        if (filter === 'all') return true;
-                        if (filter === 'resolved') return post.resolved;
-                        if (post.resolved) return false; // Hide from active views
-                        if (filter === 'walk') return post.type === 'walk' || post.type === 'useful';
-                        return post.type === filter;
-                    }).map(post => {
-                        const hasThanked = post.thanks?.includes(localDeviceId);
+                    {filteredPosts.map(post => {
+                        const hasThanked = post.thanks?.includes(currentUser?.uid);
                         let markerIcon = post.resolved ? resolvedIcon :
                             (post.type === 'danger' ? dangerIcon :
                                 (post.type === 'shelter' ? shelterIcon : walkIcon));
@@ -544,11 +539,14 @@ const MapPage = () => {
                                         </strong>
                                         {post.resolved && <span style={{ fontSize: '0.75rem', backgroundColor: '#9CA3AF', color: 'white', padding: '2px 6px', borderRadius: '12px' }}>解決済</span>}
                                     </div>
-                                    <div style={{ fontSize: '0.8rem', color: '#666' }}>{post.date}</div>
+                                    <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '2px' }}>
+                                        投稿者：{post.memberNumber ? `みまもり隊員 No.${String(post.memberNumber).padStart(3, '0')}` : 'ゲスト隊員'}
+                                    </div>
+                                    <div style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>{post.date}</div>
 
                                     {post.imageUrl && (
-                                        <div style={{ margin: '8px 0' }}>
-                                            <img src={post.imageUrl} alt="添付写真" style={{ width: '100%', maxHeight: '150px', objectFit: 'cover', borderRadius: '4px', opacity: post.resolved ? 0.6 : 1 }} />
+                                        <div style={{ margin: '8px 0', maxHeight: '150px', overflowY: 'auto', borderRadius: '4px', border: '1px solid #E5E7EB' }}>
+                                            <img src={post.imageUrl} alt="添付写真" style={{ width: '100%', display: 'block', objectFit: 'contain', opacity: post.resolved ? 0.6 : 1 }} />
                                         </div>
                                     )}
                                     <div style={{ margin: '8px 0', fontSize: '0.9rem' }}>{post.note}</div>
@@ -607,43 +605,67 @@ const MapPage = () => {
 
             <div style={{ padding: 'var(--spacing-md)' }}>
                 <h3 style={{ marginBottom: 'var(--spacing-sm)' }}>地域の最新情報</h3>
-                {userPosts.length > 0 ? (
+                {filteredPosts.length > 0 ? (
                     <div style={{ display: 'grid', gap: 'var(--spacing-sm)' }}>
-                        {[...userPosts].sort((a, b) => b.timestamp - a.timestamp).map(post => (
-                            <div
-                                key={post.id}
-                                id={`post-item-${post.id}`}
-                                className="card"
-                                onClick={() => handleListPostClick(post)}
-                                style={{
-                                    padding: 'var(--spacing-sm) var(--spacing-md)',
-                                    margin: 0,
-                                    cursor: 'pointer',
-                                    backgroundColor: activePostId === post.id ? '#EFF6FF' : 'var(--color-surface)',
-                                    borderLeft: post.type === 'danger' ? '4px solid #F59E0B' : (post.type === 'shelter' ? '4px solid #8B5CF6' : '4px solid #10B981'),
-                                    transition: 'background-color 0.2s'
-                                }}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ fontWeight: 'bold', color: post.resolved ? '#9CA3AF' : 'inherit', textDecoration: post.resolved ? 'line-through' : 'none' }}>
-                                        {post.type === 'danger' ? '⚠️' : (post.type === 'shelter' ? '🎒' : '🐾')} {post.title}
+                        {[...filteredPosts].sort((a, b) => b.timestamp - a.timestamp).map(post => {
+                            const hasThanked = post.thanks?.includes(currentUser?.uid);
+                            return (
+                                <div
+                                    key={post.id}
+                                    id={`post-item-${post.id}`}
+                                    className="card"
+                                    onClick={() => handleListPostClick(post)}
+                                    style={{
+                                        padding: 'var(--spacing-sm) var(--spacing-md)',
+                                        margin: 0,
+                                        cursor: 'pointer',
+                                        backgroundColor: activePostId === post.id ? '#EFF6FF' : 'var(--color-surface)',
+                                        borderLeft: post.type === 'danger' ? '4px solid #F59E0B' : (post.type === 'shelter' ? '4px solid #8B5CF6' : '4px solid #10B981'),
+                                        transition: 'background-color 0.2s'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ fontWeight: 'bold', color: post.resolved ? '#9CA3AF' : 'inherit', textDecoration: post.resolved ? 'line-through' : 'none' }}>
+                                            {post.type === 'danger' ? '⚠️' : (post.type === 'shelter' ? '🎒' : '🐾')} {post.title}
+                                        </div>
+                                        {post.resolved && <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#9CA3AF', color: 'white' }}>解決済</span>}
                                     </div>
-                                    {post.resolved && <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#9CA3AF', color: 'white' }}>解決済</span>}
-                                </div>
-                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '8px' }}>
-                                        {post.note || '詳細なし'}
-                                    </span>
-                                    <span>{post.date}</span>
-                                </div>
-                                {(post.imageUrl || (post.thanks && post.thanks.length > 0)) && (
-                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-sub)', display: 'flex', gap: '10px', marginTop: '6px' }}>
-                                        {post.imageUrl && <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>📷 写真あり</span>}
-                                        {post.thanks?.length > 0 && <span style={{ color: '#DB2777' }}>💖 {post.thanks.length}</span>}
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '8px' }}>
+                                            {post.note || '詳細なし'}
+                                        </span>
+                                        <span>{post.date}</span>
                                     </div>
-                                )}
-                            </div>
-                        ))}
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-sub)', display: 'flex', gap: '10px' }}>
+                                            {post.imageUrl && <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>📷 写真あり</span>}
+                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Prevent opening the map pin when clicking thanks
+                                                handleThanks(post.id, post.thanks);
+                                            }}
+                                            style={{
+                                                background: hasThanked ? '#FDF2F8' : 'transparent',
+                                                border: hasThanked ? '1px solid #FBCFE8' : '1px solid #E5E7EB',
+                                                color: hasThanked ? '#DB2777' : '#4B5563',
+                                                padding: '2px 8px',
+                                                borderRadius: '12px',
+                                                cursor: 'pointer',
+                                                fontSize: '0.8rem',
+                                                display: 'flex',
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            💖 {post.thanks?.length || 0}
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 ) : (
                     <p style={{ color: 'var(--color-text-sub)', textAlign: 'center', padding: 'var(--spacing-lg) 0' }}>

@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'つくば市ペット防災',
-        short_name: 'つくばペット防災',
-        description: 'つくば市のペット飼い主向け防災ハンドブック',
+        name: 'みまもりWAN',
+        short_name: 'みまもりWAN',
+        description: 'みんなの歩幅で作る、地域の安全とペットに優しいまちづくりアプリ',
         theme_color: '#ffffff',
         display: 'standalone',
         scope: '/',

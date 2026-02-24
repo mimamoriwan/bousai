@@ -3,6 +3,8 @@ import Layout from './components/Layout';
 import Map from './pages/Map';
 import Guide from './pages/Guide';
 import Profile from './pages/Profile';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
 import { AuthProvider } from './context/AuthContext';
 import './App.css';
 
@@ -15,6 +17,8 @@ function App() {
             <Route index element={<Map />} />
             <Route path="guide" element={<Guide />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="terms" element={<Terms />} />
+            <Route path="privacy" element={<Privacy />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import guides from '../data/guides.json';
 
 const GuidePage = () => {
@@ -9,17 +10,31 @@ const GuidePage = () => {
             <h2 style={{ marginBottom: 'var(--spacing-md)' }}>みまもりWANとは？</h2>
             <div className="card" style={{ marginBottom: 'var(--spacing-lg)' }}>
                 <p style={{ lineHeight: '1.6', marginBottom: 'var(--spacing-md)' }}>
-                    「愛犬がお散歩中に何でも口にしてしまう危険」を防ぎたいという想いから生まれました。
+                    愛犬がお散歩中に何でも口にしてしまう危険を防ぎたい、という想いから生まれました。
                 </p>
                 <p style={{ lineHeight: '1.6', marginBottom: 'var(--spacing-md)' }}>
-                    『あそこにガラスが落ちていた』『ここの花壇、今朝除草剤をかけていたよ』『よく分からないけど、このあたりめっちゃくん活するよ』など、<strong>『知っていれば予防できる』</strong>リアルな情報を地域の飼い主同士で共有するためのアプリです。
+                    例えば、いつものお散歩から帰ってきたら愛犬の足がただれていた…なんてことが起きたら、びっくりして病院に駆け込みますよね。<br />
+                    でももし事前に、「あの草むら、さっき除草剤をまいていたよ」という情報があれば、近づかないように気をつけることができます。
+                </p>
+                <p style={{ lineHeight: '1.6', marginBottom: 'var(--spacing-md)' }}>
+                    自宅の庭先に除草剤をまくこと自体は、決して悪いことではありません。ただ、その場面を目撃した人が「しばらく立ち入らない方がいいよ」と教えてくれたら、未然に防げる怪我や事故がたくさんあります。
+                </p>
+                <p style={{ lineHeight: '1.6', marginBottom: 'var(--spacing-md)', fontSize: '0.95rem', background: '#F9FAFB', padding: 'var(--spacing-sm)', borderRadius: '8px' }}>
+                    『あそこにガラスが落ちていた』<br />
+                    『ここの花壇、今朝除草剤をかけていたよ』<br />
+                    『よく分からないけど、このあたりめっちゃくん活するよ』など。
+                </p>
+                <p style={{ lineHeight: '1.6' }}>
+                    そんな、普段のお散歩で気づいたちょっとしたリアルな情報を、地域の飼い主さん同士で共有できたらいいなと思い、このアプリを開発しました。<br />
+                    合言葉は<strong>『知っていれば予防できる』</strong>です。
                 </p>
             </div>
 
             <h2 style={{ marginBottom: 'var(--spacing-md)' }}>みまもり隊員について</h2>
             <div className="card" style={{ marginBottom: 'var(--spacing-xl)' }}>
                 <p style={{ lineHeight: '1.6' }}>
-                    このサービスを使ってくれる地域のワンコたちを<strong>「みまもり隊員」</strong>と呼んでいます。いつものお散歩コースを歩きながら、みんなで地域の安全を作りましょう！いつものお散歩コースで気づいたことを気軽に共有していきましょう。
+                    このサービスを使ってくれる地域のワンコたちを<strong>「みまもり隊員」</strong>と呼んでいます。<br />
+                    いつものお散歩コースを歩きながら、みんなで地域の安全を作りましょう！「おや？」と気づいたことがあれば、ぜひ気軽に共有していきましょう🐾
                 </p>
             </div>
 
@@ -92,6 +107,11 @@ const GuidePage = () => {
                         ))}
                     </div>
                 )}
+            </div>
+
+            <div style={{ marginTop: 'var(--spacing-xl)', textAlign: 'center', fontSize: '0.85rem' }}>
+                <Link to="/terms" style={{ color: 'var(--color-text-sub)', textDecoration: 'underline', marginRight: 'var(--spacing-md)' }}>利用規約</Link>
+                <Link to="/privacy" style={{ color: 'var(--color-text-sub)', textDecoration: 'underline' }}>プライバシーポリシー</Link>
             </div>
         </div>
     );

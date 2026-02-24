@@ -17,6 +17,20 @@
     justify-content: center;
     box-shadow: var(--shadow-sm);
     z-index: 10;
+    position: relative;
+}
+
+.member-badge {
+    position: absolute;
+    right: 16px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 4px 8px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .app-header h1 {
