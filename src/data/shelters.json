@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1,
+    "name": "つくば市役所",
+    "lat": 36.0835,
+    "lng": 140.0764,
+    "address": "茨城県つくば市研究学園一丁目1番地1",
+    "type": "indoor",
+    "pet_friendly": true,
+    "notes": "ケージ持参必須"
+  },
+  {
+    "id": 2,
+    "name": "竹園公園",
+    "lat": 36.0774,
+    "lng": 140.1174,
+    "address": "茨城県つくば市竹園",
+    "type": "outdoor",
+    "pet_friendly": true,
+    "notes": "屋外避難場所"
+  },
+  {
+    "id": 3,
+    "name": "つくばカピオ",
+    "lat": 36.0790,
+    "lng": 140.1160,
+    "address": "茨城県つくば市竹園1-10-1",
+    "type": "indoor",
+    "pet_friendly": false,
+    "notes": "ペット不可"
+  },
+  {
+    "id": 4,
+    "name": "洞峰公園",
+    "lat": 36.0607,
+    "lng": 140.1221,
+    "address": "茨城県つくば市二の宮2-20",
+    "type": "outdoor",
+    "pet_friendly": true,
+    "notes": "広域避難場所"
+  }
+]

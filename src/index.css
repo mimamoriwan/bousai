@@ -1,0 +1,171 @@
+:root {
+  --color-primary: #FF6F00;
+  /* Safety Orange */
+  --color-primary-light: #FF9E40;
+  --color-secondary: #0EA5E9;
+  /* Calm Blue */
+  --color-success: #10B981;
+  --color-danger: #EF4444;
+  --color-background: #F9FAFB;
+  --color-surface: #FFFFFF;
+  --color-text-main: #1F2937;
+  --color-text-sub: #6B7280;
+  --color-border: #E5E7EB;
+
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--color-background);
+  color: var(--color-text-main);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Utilities */
+.container {
+  max-width: 480px;
+  /* Mobile focused max width */
+  margin: 0 auto;
+  padding: 0 var(--spacing-md);
+  min-height: 100vh;
+  background-color: var(--color-background);
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.2s;
+}
+
+.btn:active {
+  opacity: 0.8;
+}
+
+.btn-primary {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.btn-secondary {
+  background-color: var(--color-surface);
+  color: var(--color-text-main);
+  border: 1px solid var(--color-border);
+}
+
+.card {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+/* Add to App.css or index.css, forcing overwrite/append on index.css is better but let's append to index.css if possible or just use inline styles in complexity 1? 
+   Better to update index.css with input styles.
+*/
+
+.input-field {
+  width: 100%;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-top: 4px;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
+}
+
+/* Category Filter UI */
+.filter-container {
+  display: flex;
+  overflow-x: auto;
+  padding: var(--spacing-sm) var(--spacing-md);
+  gap: var(--spacing-sm);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  -webkit-overflow-scrolling: touch;
+  /* Smooth scrolling on iOS */
+  scrollbar-width: none;
+  /* Firefox */
+  flex-shrink: 0;
+}
+
+.filter-container::-webkit-scrollbar {
+  display: none;
+  /* Chrome, Safari, Edge */
+}
+
+.filter-chip {
+  white-space: nowrap;
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--color-primary);
+  background-color: transparent;
+  color: var(--color-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.filter-chip.active {
+  background-color: var(--color-primary);
+  color: white;
+}
