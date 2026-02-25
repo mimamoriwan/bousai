@@ -5,10 +5,11 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import shelters from '../data/shelters.json';
 import { db, storage } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, query, updateDoc, arrayUnion, arrayRemove, getDocs } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+import PullToRefresh from 'react-simple-pull-to-refresh';
 
 // Fix for default marker icon
 let DefaultIcon = L.icon({
@@ -146,10 +147,34 @@ const MapPage = () => {
         return true;
     };
 
-    // Fetch pins from Firestore
+    const fetchLatestPins = async () => {
+        try {
+            const q = query(collection(db, 'map_pins'));
+            const querySnapshot = await getDocs(q);
+            const pins = [];
+            const fortyEightHours = 48 * 60 * 60 * 1000;
+            const now = Date.now();
+
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.type !== 'shelter' && data.timestamp && (now - data.timestamp > fortyEightHours)) {
+                    return;
+                }
+                pins.push({ id: doc.id, ...data });
+            });
+            setUserPosts(pins);
+        } catch (error) {
+            console.error("Error manual fetching pins: ", error);
+        }
+    };
+
+    const handleRefresh = async () => {
+        await fetchLatestPins();
+    };
+
+    // Fetch pins from Firestore (Real-time listener for background updates)
     useEffect(() => {
         const q = query(collection(db, 'map_pins'));
-        // Listen for real-time updates
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const pins = [];
             const fortyEightHours = 48 * 60 * 60 * 1000;
@@ -157,9 +182,8 @@ const MapPage = () => {
 
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                // Avoid showing pins older than 48 hours for active freshness, EXCEPT for disaster/shelter pins
                 if (data.type !== 'shelter' && data.timestamp && (now - data.timestamp > fortyEightHours)) {
-                    return; // Skip this pin
+                    return;
                 }
                 pins.push({ id: doc.id, ...data });
             });
@@ -168,7 +192,6 @@ const MapPage = () => {
             console.error("Error fetching pins: ", error);
         });
 
-        // Cleanup subscription on unmount
         return () => unsubscribe();
     }, []);
 
@@ -329,7 +352,7 @@ const MapPage = () => {
     return (
         <div className="map-page" style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%' }}>
 
-            <div style={{ flex: 1, minHeight: '300px', position: 'relative' }}>
+            <div style={{ height: '40vh', flexShrink: 0, position: 'relative', margin: '0 16px 12px 16px', borderRadius: '12px', overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
                 {/* Post Mode Toggle Button */}
                 <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 1000 }}>
                     <button
@@ -595,7 +618,7 @@ const MapPage = () => {
                 </MapContainer>
             </div>
 
-            <div className="filter-container">
+            <div className="filter-container" style={{ flexShrink: 0 }}>
                 <button className={`filter-chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>すべて</button>
                 <button className={`filter-chip ${filter === 'danger' ? 'active' : ''}`} onClick={() => setFilter('danger')}>⚠️ 危険・注意</button>
                 <button className={`filter-chip ${filter === 'walk' ? 'active' : ''}`} onClick={() => setFilter('walk')}>🐾 お散歩情報</button>
@@ -603,75 +626,97 @@ const MapPage = () => {
                 <button className={`filter-chip ${filter === 'resolved' ? 'active' : ''}`} onClick={() => setFilter('resolved')}>👍 解決済み</button>
             </div>
 
-            <div style={{ padding: 'var(--spacing-md)' }}>
-                <h3 style={{ marginBottom: 'var(--spacing-sm)' }}>地域の最新情報</h3>
-                {filteredPosts.length > 0 ? (
-                    <div style={{ display: 'grid', gap: 'var(--spacing-sm)' }}>
-                        {[...filteredPosts].sort((a, b) => b.timestamp - a.timestamp).map(post => {
-                            const hasThanked = post.thanks?.includes(currentUser?.uid);
-                            return (
-                                <div
-                                    key={post.id}
-                                    id={`post-item-${post.id}`}
-                                    className="card"
-                                    onClick={() => handleListPostClick(post)}
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-md)',
-                                        margin: 0,
-                                        cursor: 'pointer',
-                                        backgroundColor: activePostId === post.id ? '#EFF6FF' : 'var(--color-surface)',
-                                        borderLeft: post.type === 'danger' ? '4px solid #F59E0B' : (post.type === 'shelter' ? '4px solid #8B5CF6' : '4px solid #10B981'),
-                                        transition: 'background-color 0.2s'
-                                    }}
-                                >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div style={{ fontWeight: 'bold', color: post.resolved ? '#9CA3AF' : 'inherit', textDecoration: post.resolved ? 'line-through' : 'none' }}>
-                                            {post.type === 'danger' ? '⚠️' : (post.type === 'shelter' ? '🎒' : '🐾')} {post.title}
+            <div style={{ padding: 'var(--spacing-md) var(--spacing-md) 0 var(--spacing-md)', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0 }}>地域の最新情報</h3>
+                <button
+                    onClick={handleRefresh}
+                    style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '1.2rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px',
+                        color: 'var(--color-text-sub)'
+                    }}
+                    title="最新の情報に更新"
+                >
+                    🔄
+                </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', overscrollBehaviorY: 'contain', padding: '0 var(--spacing-md)', paddingBottom: '120px' }}>
+                <PullToRefresh onRefresh={handleRefresh} pullingContent="" refreshingContent={<div style={{ textAlign: 'center', padding: '10px', color: 'var(--color-text-sub)' }}>更新中...</div>}>
+                    {filteredPosts.length > 0 ? (
+                        <div style={{ display: 'grid', gap: 'var(--spacing-sm)', marginTop: 'var(--spacing-sm)' }}>
+                            {[...filteredPosts].sort((a, b) => b.timestamp - a.timestamp).map(post => {
+                                const hasThanked = post.thanks?.includes(currentUser?.uid);
+                                return (
+                                    <div
+                                        key={post.id}
+                                        id={`post-item-${post.id}`}
+                                        className="card"
+                                        onClick={() => handleListPostClick(post)}
+                                        style={{
+                                            padding: 'var(--spacing-sm) var(--spacing-md)',
+                                            margin: 0,
+                                            cursor: 'pointer',
+                                            backgroundColor: activePostId === post.id ? '#EFF6FF' : 'var(--color-surface)',
+                                            borderLeft: post.type === 'danger' ? '4px solid #F59E0B' : (post.type === 'shelter' ? '4px solid #8B5CF6' : '4px solid #10B981'),
+                                            transition: 'background-color 0.2s'
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div style={{ fontWeight: 'bold', color: post.resolved ? '#9CA3AF' : 'inherit', textDecoration: post.resolved ? 'line-through' : 'none' }}>
+                                                {post.type === 'danger' ? '⚠️' : (post.type === 'shelter' ? '🎒' : '🐾')} {post.title}
+                                            </div>
+                                            {post.resolved && <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#9CA3AF', color: 'white' }}>解決済</span>}
                                         </div>
-                                        {post.resolved && <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#9CA3AF', color: 'white' }}>解決済</span>}
-                                    </div>
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '8px' }}>
-                                            {post.note || '詳細なし'}
-                                        </span>
-                                        <span>{post.date}</span>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-sub)', display: 'flex', gap: '10px' }}>
-                                            {post.imageUrl && <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>📷 写真あり</span>}
+                                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '8px' }}>
+                                                {post.note || '詳細なし'}
+                                            </span>
+                                            <span>{post.date}</span>
                                         </div>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation(); // Prevent opening the map pin when clicking thanks
-                                                handleThanks(post.id, post.thanks);
-                                            }}
-                                            style={{
-                                                background: hasThanked ? '#FDF2F8' : 'transparent',
-                                                border: hasThanked ? '1px solid #FBCFE8' : '1px solid #E5E7EB',
-                                                color: hasThanked ? '#DB2777' : '#4B5563',
-                                                padding: '2px 8px',
-                                                borderRadius: '12px',
-                                                cursor: 'pointer',
-                                                fontSize: '0.8rem',
-                                                display: 'flex',
-                                                justifyContent: 'center',
-                                                alignItems: 'center',
-                                                gap: '4px',
-                                                transition: 'all 0.2s'
-                                            }}
-                                        >
-                                            💖 {post.thanks?.length || 0}
-                                        </button>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-sub)', display: 'flex', gap: '10px' }}>
+                                                {post.imageUrl && <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>📷 写真あり</span>}
+                                            </div>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // Prevent opening the map pin when clicking thanks
+                                                    handleThanks(post.id, post.thanks);
+                                                }}
+                                                style={{
+                                                    background: hasThanked ? '#FDF2F8' : 'transparent',
+                                                    border: hasThanked ? '1px solid #FBCFE8' : '1px solid #E5E7EB',
+                                                    color: hasThanked ? '#DB2777' : '#4B5563',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '12px',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.8rem',
+                                                    display: 'flex',
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
+                                                    gap: '4px',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                💖 {post.thanks?.length || 0}
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                ) : (
-                    <p style={{ color: 'var(--color-text-sub)', textAlign: 'center', padding: 'var(--spacing-lg) 0' }}>
-                        周辺の投稿はまだありません。
-                    </p>
-                )}
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <p style={{ color: 'var(--color-text-sub)', textAlign: 'center', padding: 'var(--spacing-lg) 0' }}>
+                            周辺の投稿はまだありません。
+                        </p>
+                    )}
+                </PullToRefresh>
             </div>
         </div>
     );

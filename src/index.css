@@ -44,6 +44,15 @@ body {
   color: var(--color-text-main);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior-y: none;
+}
+
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 img,

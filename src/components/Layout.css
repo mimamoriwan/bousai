@@ -1,7 +1,8 @@
 .app-layout {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100%;
+    width: 100%;
     max-width: 480px;
     margin: 0 auto;
     background-color: var(--color-background);
@@ -14,16 +15,16 @@
     color: white;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
+    padding: 0 16px;
     box-shadow: var(--shadow-sm);
     z-index: 10;
     position: relative;
+    flex-shrink: 0;
 }
 
 .member-badge {
-    position: absolute;
-    right: 16px;
-    font-size: 0.8rem;
+    font-size: 0.7rem;
     font-weight: bold;
     background-color: rgba(255, 255, 255, 0.2);
     padding: 4px 8px;
@@ -31,19 +32,44 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .app-header h1 {
     font-size: 1.25rem;
     font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 8px;
 }
 
 .app-content {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+}
+
+.scroll-page-main {
+    flex: 1;
     overflow-y: auto;
+    overscroll-behavior-y: contain;
     padding: var(--spacing-md);
     padding-bottom: 80px;
     /* Space for bottom nav */
+    -webkit-overflow-scrolling: touch;
+}
+
+.map-container-main {
+    flex: 1;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .bottom-nav {

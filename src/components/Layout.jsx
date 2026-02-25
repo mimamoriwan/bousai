@@ -10,18 +10,20 @@ const Layout = () => {
         return location.pathname === path ? 'nav-item active' : 'nav-item';
     };
 
+    const isMapPage = location.pathname === '/';
+
     return (
         <div className="app-layout">
             <header className="app-header">
                 <h1>みまもりWAN</h1>
                 <div className="member-badge">
                     {currentUser && !currentUser.isAnonymous && memberNumber
-                        ? `No.${String(memberNumber).padStart(3, '0')}`
-                        : 'ゲスト隊員'}
+                        ? `みまもり隊員：No.${String(memberNumber).padStart(3, '0')}`
+                        : 'みまもり隊員見習い'}
                 </div>
             </header>
 
-            <main className="app-content">
+            <main className={`app-content ${isMapPage ? 'map-container-main' : 'scroll-page-main'}`}>
                 <Outlet />
             </main>
 
