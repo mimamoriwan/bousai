@@ -6,17 +6,21 @@ import Profile from './pages/Profile';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import { AuthProvider } from './context/AuthContext';
+import InstallPrompt from './components/InstallPrompt';
 import './App.css';
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <InstallPrompt />
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Map />} />
+            <Route path="report" element={<Map initialPostMode={true} />} />
             <Route path="guide" element={<Guide />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="mypage" element={<Profile />} />
             <Route path="terms" element={<Terms />} />
             <Route path="privacy" element={<Privacy />} />
             <Route path="*" element={<Navigate to="/" replace />} />

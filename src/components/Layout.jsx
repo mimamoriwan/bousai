@@ -7,10 +7,12 @@ const Layout = () => {
     const { currentUser, memberNumber } = useAuth();
 
     const isActive = (path) => {
+        if (path === '/profile' && location.pathname === '/mypage') return 'nav-item active';
+        if (path === '/' && location.pathname === '/report') return 'nav-item active';
         return location.pathname === path ? 'nav-item active' : 'nav-item';
     };
 
-    const isMapPage = location.pathname === '/';
+    const isMapPage = location.pathname === '/' || location.pathname === '/report';
 
     return (
         <div className="app-layout">

@@ -30,6 +30,11 @@ export default defineConfig({
           }
         ]
       },
+      workbox: {
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/__/],
+        cleanupOutdatedCaches: true
+      },
       devOptions: {
         enabled: true
       }

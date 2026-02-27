@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut, signInAnonymously, linkWithPopup } from 'firebase/auth';
+import { onAuthStateChanged, signInWithRedirect, signOut, signInAnonymously, linkWithRedirect, getRedirectResult, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, runTransaction } from 'firebase/firestore';
 import { auth, provider, db } from '../firebase';
 
@@ -17,9 +17,9 @@ export const AuthProvider = ({ children }) => {
 
     const loginWithGoogle = async () => {
         try {
-            await signInWithPopup(auth, provider);
+            await signInWithRedirect(auth, provider);
         } catch (error) {
-            console.error('Error signing in with Google:', error);
+            console.error('Error signing in with Google redirect:', error);
             throw error;
         }
     };
@@ -27,10 +27,10 @@ export const AuthProvider = ({ children }) => {
     const linkWithGoogle = async () => {
         try {
             if (currentUser && currentUser.isAnonymous) {
-                await linkWithPopup(currentUser, provider);
+                await linkWithRedirect(currentUser, provider);
             }
         } catch (error) {
-            console.error('Error linking with Google:', error);
+            console.error('Error linking with Google redirect:', error);
             throw error;
         }
     };
@@ -45,6 +45,26 @@ export const AuthProvider = ({ children }) => {
     };
 
     useEffect(() => {
+        // Handle redirect results for mobile and PWA flows
+        getRedirectResult(auth)
+            .then(async (result) => {
+                if (result) {
+                    console.log('Successfully completed redirect flow:', result);
+                }
+            }).catch(async (error) => {
+                console.error('Redirect auth error:', error);
+                if (error.code === 'auth/credential-already-in-use') {
+                    // This means the Google account has already been used to create an account
+                    console.log('Account already exists. Logging in instead of linking.');
+                    try {
+                        const credential = GoogleAuthProvider.credentialFromError(error);
+                        await signInWithCredential(auth, credential);
+                    } catch (signInError) {
+                        console.error('Fallback sign-in failed', signInError);
+                    }
+                }
+            });
+
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 setCurrentUser(user);

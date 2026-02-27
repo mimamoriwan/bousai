@@ -123,14 +123,14 @@ const MapClickHandler = ({ isPostMode, onMapClick }) => {
     return null;
 };
 
-const MapPage = () => {
+const MapPage = ({ initialPostMode = false }) => {
     const position = [36.0834, 140.0766]; // Tsukuba City Hall
 
     // User Posts State (now driven by Firestore)
     const [userPosts, setUserPosts] = useState([]);
     const [filter, setFilter] = useState('all');
 
-    const [isPostMode, setIsPostMode] = useState(false);
+    const [isPostMode, setIsPostMode] = useState(initialPostMode);
     const [tempPost, setTempPost] = useState(null); // { lat, lng }
     const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null });
     const [isProcessingImage, setIsProcessingImage] = useState(false);

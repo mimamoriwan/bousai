@@ -1,0 +1,94 @@
+.install-prompt-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100dvh;
+    background-color: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    z-index: 999999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: var(--spacing-lg);
+    box-sizing: border-box;
+}
+
+.install-prompt-modal {
+    background-color: white;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    border-radius: 20px;
+    padding: var(--spacing-xl);
+    max-width: 400px;
+    width: 100%;
+    text-align: center;
+    border: 1px solid var(--color-border);
+}
+
+.install-prompt-icon {
+    font-size: 3rem;
+    margin-bottom: var(--spacing-sm);
+    color: var(--color-primary);
+    line-height: 1;
+}
+
+.install-prompt-title {
+    font-size: 1.25rem;
+    font-weight: bold;
+    color: var(--color-text-main);
+    margin-bottom: var(--spacing-md);
+}
+
+.install-prompt-message {
+    font-size: 1rem;
+    color: var(--color-text-sub);
+    line-height: 1.6;
+    margin-bottom: var(--spacing-xl);
+    text-align: left;
+}
+
+.install-prompt-message strong {
+    color: var(--color-primary);
+    font-size: 1.1rem;
+}
+
+.icon-box {
+    display: inline-block;
+    background-color: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 2px 6px;
+    font-size: 0.9em;
+    font-weight: bold;
+    color: var(--color-text-main);
+}
+
+.install-prompt-copy-btn {
+    width: 100%;
+    padding: 14px 24px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: white;
+    background-color: var(--color-primary);
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(255, 111, 0, 0.3);
+}
+
+.install-prompt-copy-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(255, 111, 0, 0.4);
+}
+
+.install-prompt-copy-btn:active {
+    transform: translateY(0);
+}
+
+.install-prompt-copy-btn.copied {
+    background-color: #10B981;
+    /* Success green */
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
