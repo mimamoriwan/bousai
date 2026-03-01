@@ -61,7 +61,7 @@ const resolvedIcon = L.divIcon({
     iconAnchor: [18, 18]
 });
 
-const LocationMarker = () => {
+const LocationMarker = ({ isPostMode, onMapClick }) => {
     const [position, setPosition] = useState(null);
     const map = useMap();
 
@@ -75,10 +75,22 @@ const LocationMarker = () => {
     return (
         <>
             {position !== null && (
-                <Marker position={position} icon={userIcon}>
-                    <Popup>
-                        <strong>現在地</strong>
-                    </Popup>
+                <Marker
+                    position={position}
+                    icon={userIcon}
+                    eventHandlers={{
+                        click: () => {
+                            if (isPostMode) {
+                                onMapClick(position);
+                            }
+                        }
+                    }}
+                >
+                    {!isPostMode && (
+                        <Popup>
+                            <strong>現在地</strong>
+                        </Popup>
+                    )}
                 </Marker>
             )}
             <div style={{ position: 'absolute', bottom: '100px', right: '10px', zIndex: 1000 }}>
@@ -107,6 +119,8 @@ const LocationMarker = () => {
                     📍
                 </button>
             </div>
+
+            {/* The floating button has been removed from here */}
         </>
     );
 };
@@ -124,13 +138,12 @@ const MapClickHandler = ({ isPostMode, onMapClick }) => {
 };
 
 const MapPage = ({ initialPostMode = false }) => {
-    const position = [36.0834, 140.0766]; // Tsukuba City Hall
-
     // User Posts State (now driven by Firestore)
     const [userPosts, setUserPosts] = useState([]);
     const [filter, setFilter] = useState('all');
 
     const [isPostMode, setIsPostMode] = useState(initialPostMode);
+    const [showPostOptions, setShowPostOptions] = useState(false);
     const [tempPost, setTempPost] = useState(null); // { lat, lng }
     const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null });
     const [isProcessingImage, setIsProcessingImage] = useState(false);
@@ -141,6 +154,50 @@ const MapPage = ({ initialPostMode = false }) => {
     const mapRef = useRef(null);
     const markerRefs = useRef(new Map());
     const [activePostId, setActivePostId] = useState(null);
+
+    // Initial Map Location State
+    const [initialCenter, setInitialCenter] = useState(null);
+    const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+
+    useEffect(() => {
+        const DEFAULT_LOCATION = [36.0834, 140.0766]; // Tsukuba City Hall
+
+        if (!navigator.geolocation) {
+            setInitialCenter(DEFAULT_LOCATION);
+            setIsLoadingLocation(false);
+            return;
+        }
+
+        // Set a timeout in case geolocation takes too long or prompts hang
+        const timeoutId = setTimeout(() => {
+            if (isLoadingLocation) {
+                console.warn('Geolocation timeout, using default location.');
+                setInitialCenter(DEFAULT_LOCATION);
+                setIsLoadingLocation(false);
+            }
+        }, 5000);
+
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                clearTimeout(timeoutId);
+                setInitialCenter([pos.coords.latitude, pos.coords.longitude]);
+                setIsLoadingLocation(false);
+            },
+            (err) => {
+                clearTimeout(timeoutId);
+                console.warn(`Geolocation error (${err.code}): ${err.message}`);
+                setInitialCenter(DEFAULT_LOCATION);
+                setIsLoadingLocation(false);
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 0
+            }
+        );
+
+        return () => clearTimeout(timeoutId);
+    }, []);
 
     // Anonymous auth handles identity now, no need to block UI actions
     const requireAuth = (actionName) => {
@@ -353,269 +410,364 @@ const MapPage = ({ initialPostMode = false }) => {
         <div className="map-page" style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%' }}>
 
             <div style={{ height: '40vh', flexShrink: 0, position: 'relative', margin: '0 16px 12px 16px', borderRadius: '12px', overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
-                {/* Post Mode Toggle Button */}
-                <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 1000 }}>
-                    <button
-                        onClick={() => {
-                            if (!isPostMode && !requireAuth('スポットの投稿')) return;
-                            setIsPostMode(!isPostMode);
-                            setTempPost(null);
-                        }}
-                        className="btn"
-                        style={{
-                            backgroundColor: isPostMode ? 'var(--color-danger)' : 'var(--color-primary)',
-                            color: 'white',
-                            boxShadow: 'var(--shadow-md)'
-                        }}
-                    >
-                        {isPostMode ? '投稿キャンセル' : '＋ スポット投稿'}
-                    </button>
-                </div>
-
-                {isPostMode && (
+                {isLoadingLocation ? (
                     <div style={{
-                        position: 'absolute', top: '60px', left: '10px', right: '10px', zIndex: 1000,
-                        backgroundColor: 'rgba(255, 255, 255, 0.9)', padding: '10px', borderRadius: '8px',
-                        textAlign: 'center', fontSize: '0.9rem', border: '2px solid var(--color-primary)'
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        height: '100%', backgroundColor: '#f9fafb', color: 'var(--color-primary)'
                     }}>
-                        地図上の地点をタップして登録してください
+                        <div className="initial-spinner" style={{ width: '40px', height: '40px', borderWidth: '4px', marginBottom: '10px' }}></div>
+                        <div style={{ fontWeight: 'bold' }}>現在地を取得中...🐾</div>
                     </div>
-                )}
+                ) : (
+                    <>
+                        {/* Post Mode Toggle Button */}
+                        <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 1000 }}>
+                            <button
+                                onClick={() => {
+                                    if (!isPostMode && !requireAuth('スポットの投稿')) return;
 
-                {/* Post Form Modal */}
-                {tempPost && (
-                    <div style={{
-                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                        backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
-                        <div className="card" style={{ width: '90%', maxWidth: '400px', margin: 0 }}>
-                            <h3>新規スポット登録</h3>
-                            <form onSubmit={handlePostSubmit}>
-                                <div style={{ marginBottom: '10px' }}>
-                                    <label style={{ display: 'block', fontWeight: 'bold' }}>種類</label>
-                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            <input
-                                                type="radio" name="type" value="danger"
-                                                checked={postForm.type === 'danger'}
-                                                onChange={e => setPostForm({ ...postForm, type: e.target.value })}
-                                            /> ⚠️ 危険・注意
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            <input
-                                                type="radio" name="type" value="walk"
-                                                checked={postForm.type === 'walk'}
-                                                onChange={e => setPostForm({ ...postForm, type: e.target.value })}
-                                            /> 🐾 お散歩情報
-                                        </label>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            <input
-                                                type="radio" name="type" value="shelter"
-                                                checked={postForm.type === 'shelter'}
-                                                onChange={e => setPostForm({ ...postForm, type: e.target.value })}
-                                            /> 🎒 防災・避難所
-                                        </label>
-                                    </div>
-                                </div>
-                                <div style={{ marginBottom: '10px' }}>
-                                    <label style={{ display: 'block', fontWeight: 'bold' }}>タイトル</label>
-                                    <input
-                                        type="text" className="input-field" required
-                                        value={postForm.title}
-                                        onChange={e => setPostForm({ ...postForm, title: e.target.value })}
-                                        placeholder="例：歩道が狭い、水飲み場あり"
-                                    />
-                                </div>
-                                <div style={{ marginBottom: '10px' }}>
-                                    <label style={{ display: 'block', fontWeight: 'bold' }}>詳細メモ</label>
-                                    <textarea
-                                        className="input-field" rows="2"
-                                        value={postForm.note}
-                                        onChange={e => setPostForm({ ...postForm, note: e.target.value })}
-                                    ></textarea>
-                                </div>
-                                <div style={{ marginBottom: '10px' }}>
-                                    <label style={{ display: 'block', fontWeight: 'bold' }}>写真</label>
-                                    <input
-                                        type="file"
-                                        accept="image/*,.heic,.heif"
-                                        onChange={async (e) => {
-                                            const file = e.target.files[0];
-                                            if (file) {
-                                                setIsProcessingImage(true);
-                                                try {
-                                                    const { compressImage } = await import('../utils/imageUtils');
-                                                    const compressedDataUrl = await compressImage(file);
-                                                    setPostForm(prev => ({ ...prev, image: compressedDataUrl }));
-                                                } catch (error) {
-                                                    console.error("Image compression failed", error);
-                                                    alert("画像の処理に失敗しました。");
-                                                } finally {
-                                                    setIsProcessingImage(false);
-                                                }
-                                            } else {
-                                                setPostForm(prev => ({ ...prev, image: null }));
-                                            }
-                                        }}
-                                        className="input-field"
-                                        style={{ padding: '8px' }}
-                                        disabled={isProcessingImage}
-                                    />
-                                    {isProcessingImage && (
-                                        <div style={{ marginTop: '10px', color: 'var(--color-primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                                            処理中... しばらくお待ち下さい (HEIC画像などは数秒かかります)
-                                        </div>
-                                    )}
-                                    {postForm.image && !isProcessingImage && (
-                                        <div style={{ marginTop: '10px' }}>
-                                            <img src={postForm.image} alt="Preview" style={{ width: '100%', maxHeight: '150px', objectFit: 'contain', borderRadius: '4px' }} />
-                                        </div>
-                                    )}
-                                </div>
-                                <div style={{ display: 'flex', gap: '10px' }}>
-                                    <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setTempPost(null)} disabled={isSubmitting}>キャンセル</button>
-                                    <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={isProcessingImage || isSubmitting}>
-                                        {isSubmitting ? '保存中...' : '登録'}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )}
-
-                <MapContainer center={position} zoom={15} scrollWheelZoom={true} style={{ height: '100%', width: '100%' }} ref={mapRef}>
-                    <TileLayer
-                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <LocationMarker />
-                    <MapClickHandler isPostMode={isPostMode} onMapClick={handleMapClick} />
-
-                    {/* Official Shelters */}
-                    {shelters.filter(s => filter === 'shelter').map(shelter => (
-                        <Marker key={shelter.id} position={[shelter.lat, shelter.lng]}>
-                            <Popup>
-                                <strong>{shelter.name}</strong><br />
-                                {shelter.address}<br />
-                                <span style={{
-                                    display: 'inline-block',
-                                    marginTop: '4px',
-                                    padding: '2px 6px',
-                                    borderRadius: '4px',
-                                    backgroundColor: shelter.pet_friendly ? 'var(--color-success)' : 'var(--color-text-sub)',
-                                    color: 'white',
-                                    fontSize: '0.75rem'
-                                }}>
-                                    {shelter.pet_friendly ? 'ペット可' : 'ペット不可'}
-                                </span>
-                                {shelter.notes && <div style={{ fontSize: '0.8rem', marginTop: '4px' }}>{shelter.notes}</div>}
-                            </Popup>
-                        </Marker>
-                    ))}
-
-                    {/* User Posts */}
-                    {filteredPosts.map(post => {
-                        const hasThanked = post.thanks?.includes(currentUser?.uid);
-                        let markerIcon = post.resolved ? resolvedIcon :
-                            (post.type === 'danger' ? dangerIcon :
-                                (post.type === 'shelter' ? shelterIcon : walkIcon));
-
-                        return (
-                            <Marker
-                                key={post.id}
-                                position={[post.lat, post.lng]}
-                                icon={markerIcon}
-                                ref={(ref) => {
-                                    if (ref) {
-                                        markerRefs.current.set(post.id, ref);
+                                    if (isPostMode) {
+                                        setIsPostMode(false);
+                                        setTempPost(null);
                                     } else {
-                                        markerRefs.current.delete(post.id);
+                                        setShowPostOptions(true);
                                     }
                                 }}
-                                eventHandlers={{
-                                    click: () => {
-                                        setActivePostId(post.id);
-                                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                                    },
-                                    popupclose: () => {
-                                        setTimeout(() => {
-                                            setActivePostId((currentActive) => {
-                                                if (!currentActive || currentActive === post.id) {
-                                                    // No new popup was opened, so we are actually closing. Scroll back to list.
-                                                    const el = document.getElementById(`post-item-${post.id}`);
-                                                    if (el) {
-                                                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                    }
-                                                    return null;
-                                                }
-                                                return currentActive;
-                                            });
-                                        }, 100);
-                                    }
+                                className="btn"
+                                style={{
+                                    backgroundColor: isPostMode ? 'var(--color-danger)' : 'var(--color-primary)',
+                                    color: 'white',
+                                    boxShadow: 'var(--shadow-md)'
                                 }}
                             >
-                                <Popup>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                        <strong style={{ fontSize: '1.1rem', color: post.resolved ? '#9CA3AF' : 'inherit' }}>
-                                            {post.resolved ? <strike>{post.title}</strike> : post.title}
-                                        </strong>
-                                        {post.resolved && <span style={{ fontSize: '0.75rem', backgroundColor: '#9CA3AF', color: 'white', padding: '2px 6px', borderRadius: '12px' }}>解決済</span>}
-                                    </div>
-                                    <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '2px' }}>
-                                        投稿者：{post.memberNumber ? `みまもり隊員 No.${String(post.memberNumber).padStart(3, '0')}` : 'ゲスト隊員'}
-                                    </div>
-                                    <div style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>{post.date}</div>
+                                {isPostMode ? '投稿キャンセル' : '＋ スポット投稿'}
+                            </button>
+                        </div>
 
-                                    {post.imageUrl && (
-                                        <div style={{ margin: '8px 0', maxHeight: '150px', overflowY: 'auto', borderRadius: '4px', border: '1px solid #E5E7EB' }}>
-                                            <img src={post.imageUrl} alt="添付写真" style={{ width: '100%', display: 'block', objectFit: 'contain', opacity: post.resolved ? 0.6 : 1 }} />
+                        {/* Post Options Action Sheet / Modal */}
+                        {showPostOptions && (
+                            <div style={{
+                                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                                backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 2000,
+                                display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+                            }}>
+                                <div className="card" style={{
+                                    width: '100%', maxWidth: '500px', margin: 0,
+                                    borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
+                                    padding: '24px 20px', paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
+                                    animation: 'slideUp 0.3s ease-out'
+                                }}>
+                                    <h3 style={{ textAlign: 'center', marginBottom: '20px', fontSize: '1.1rem' }}>投稿方法の選択</h3>
+
+                                    <button
+                                        onClick={() => {
+                                            setShowPostOptions(false);
+                                            // Get precise current position if possible instead of relying solely on initialCenter
+                                            if (navigator.geolocation) {
+                                                navigator.geolocation.getCurrentPosition(
+                                                    (pos) => {
+                                                        setTempPost({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                                                    },
+                                                    (err) => {
+                                                        console.warn("Geolocation fallback:", err);
+                                                        if (initialCenter) {
+                                                            setTempPost({ lat: initialCenter[0], lng: initialCenter[1] });
+                                                        } else {
+                                                            alert("現在地を取得できませんでした。");
+                                                        }
+                                                    },
+                                                    { enableHighAccuracy: true, timeout: 5000 }
+                                                );
+                                            } else if (initialCenter) {
+                                                setTempPost({ lat: initialCenter[0], lng: initialCenter[1] });
+                                            }
+                                        }}
+                                        className="btn btn-primary"
+                                        style={{ width: '100%', marginBottom: '12px', fontSize: '1.1rem', padding: '16px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+                                    >
+                                        📍 今いる場所（現在地）で報告する
+                                    </button>
+
+                                    <button
+                                        onClick={() => {
+                                            setShowPostOptions(false);
+                                            setIsPostMode(true);
+                                        }}
+                                        className="btn"
+                                        style={{ width: '100%', marginBottom: '16px', fontSize: '1.1rem', padding: '16px', backgroundColor: '#F3F4F6', color: '#1F2937', borderRadius: '12px', border: '1px solid #E5E7EB' }}
+                                    >
+                                        🗺️ 地図から場所を選んで報告する
+                                    </button>
+
+                                    <button
+                                        onClick={() => setShowPostOptions(false)}
+                                        className="btn btn-secondary"
+                                        style={{ width: '100%', padding: '16px', borderRadius: '12px', backgroundColor: '#fff', border: 'none', color: '#6B7280' }}
+                                    >
+                                        キャンセル
+                                    </button>
+                                </div>
+                                <style>{`
+                                    @keyframes slideUp {
+                                        from { transform: translateY(100%); }
+                                        to { transform: translateY(0); }
+                                    }
+                                `}</style>
+                            </div>
+                        )}
+
+                        {isPostMode && (
+                            <div style={{
+                                position: 'absolute', top: '60px', left: '10px', right: '10px', zIndex: 1000,
+                                backgroundColor: 'rgba(255, 255, 255, 0.9)', padding: '10px', borderRadius: '8px',
+                                textAlign: 'center', fontSize: '0.9rem', border: '2px solid var(--color-primary)'
+                            }}>
+                                地図上の地点をタップして登録してください
+                            </div>
+                        )}
+
+                        {/* Post Form Modal */}
+                        {tempPost && (
+                            <div style={{
+                                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                                backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                                <div className="card" style={{ width: '90%', maxWidth: '400px', margin: 0 }}>
+                                    <h3>新規スポット登録</h3>
+                                    <form onSubmit={handlePostSubmit}>
+                                        <div style={{ marginBottom: '10px' }}>
+                                            <label style={{ display: 'block', fontWeight: 'bold' }}>種類</label>
+                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <input
+                                                        type="radio" name="type" value="danger"
+                                                        checked={postForm.type === 'danger'}
+                                                        onChange={e => setPostForm({ ...postForm, type: e.target.value })}
+                                                    /> ⚠️ 危険・注意
+                                                </label>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <input
+                                                        type="radio" name="type" value="walk"
+                                                        checked={postForm.type === 'walk'}
+                                                        onChange={e => setPostForm({ ...postForm, type: e.target.value })}
+                                                    /> 🐾 お散歩情報
+                                                </label>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <input
+                                                        type="radio" name="type" value="shelter"
+                                                        checked={postForm.type === 'shelter'}
+                                                        onChange={e => setPostForm({ ...postForm, type: e.target.value })}
+                                                    /> 🎒 防災・避難所
+                                                </label>
+                                            </div>
                                         </div>
-                                    )}
-                                    <div style={{ margin: '8px 0', fontSize: '0.9rem' }}>{post.note}</div>
-
-                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '12px', borderTop: '1px solid #eee', paddingTop: '8px' }}>
-                                        <button
-                                            onClick={() => handleThanks(post.id, post.thanks)}
-                                            style={{
-                                                background: hasThanked ? '#FDF2F8' : '#F3F4F6',
-                                                border: hasThanked ? '1px solid #FBCFE8' : '1px solid #E5E7EB',
-                                                color: hasThanked ? '#DB2777' : '#4B5563',
-                                                padding: '4px 8px', borderRadius: '16px', cursor: 'pointer', fontSize: '0.85rem', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '4px'
-                                            }}
-                                        >
-                                            💖 {post.thanks?.length || 0}
-                                        </button>
-
-                                        {!post.resolved && (
-                                            <button
-                                                onClick={() => handleResolve(post.id)}
-                                                style={{
-                                                    background: '#ECFDF5', border: '1px solid #A7F3D0', color: '#059669',
-                                                    padding: '4px 8px', borderRadius: '16px', cursor: 'pointer', fontSize: '0.85rem', flex: 1
+                                        <div style={{ marginBottom: '10px' }}>
+                                            <label style={{ display: 'block', fontWeight: 'bold' }}>タイトル</label>
+                                            <input
+                                                type="text" className="input-field" required
+                                                value={postForm.title}
+                                                onChange={e => setPostForm({ ...postForm, title: e.target.value })}
+                                                placeholder="例：歩道が狭い、水飲み場あり"
+                                            />
+                                        </div>
+                                        <div style={{ marginBottom: '10px' }}>
+                                            <label style={{ display: 'block', fontWeight: 'bold' }}>詳細メモ</label>
+                                            <textarea
+                                                className="input-field" rows="2"
+                                                value={postForm.note}
+                                                onChange={e => setPostForm({ ...postForm, note: e.target.value })}
+                                            ></textarea>
+                                        </div>
+                                        <div style={{ marginBottom: '10px' }}>
+                                            <label style={{ display: 'block', fontWeight: 'bold' }}>写真</label>
+                                            <input
+                                                type="file"
+                                                accept="image/*,.heic,.heif"
+                                                onChange={async (e) => {
+                                                    const file = e.target.files[0];
+                                                    if (file) {
+                                                        setIsProcessingImage(true);
+                                                        try {
+                                                            const { compressImage } = await import('../utils/imageUtils');
+                                                            const compressedDataUrl = await compressImage(file);
+                                                            setPostForm(prev => ({ ...prev, image: compressedDataUrl }));
+                                                        } catch (error) {
+                                                            console.error("Image compression failed", error);
+                                                            alert("画像の処理に失敗しました。");
+                                                        } finally {
+                                                            setIsProcessingImage(false);
+                                                        }
+                                                    } else {
+                                                        setPostForm(prev => ({ ...prev, image: null }));
+                                                    }
                                                 }}
-                                            >
-                                                👍 解決済に
+                                                className="input-field"
+                                                style={{ padding: '8px' }}
+                                                disabled={isProcessingImage}
+                                            />
+                                            {isProcessingImage && (
+                                                <div style={{ marginTop: '10px', color: 'var(--color-primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                                    処理中... しばらくお待ち下さい (HEIC画像などは数秒かかります)
+                                                </div>
+                                            )}
+                                            {postForm.image && !isProcessingImage && (
+                                                <div style={{ marginTop: '10px' }}>
+                                                    <img src={postForm.image} alt="Preview" style={{ width: '100%', maxHeight: '150px', objectFit: 'contain', borderRadius: '4px' }} />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '10px' }}>
+                                            <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setTempPost(null)} disabled={isSubmitting}>キャンセル</button>
+                                            <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={isProcessingImage || isSubmitting}>
+                                                {isSubmitting ? '保存中...' : '登録'}
                                             </button>
-                                        )}
-                                    </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
 
-                                    <div style={{ textAlign: 'right', marginTop: '8px' }}>
-                                        <button
-                                            onClick={() => deletePost(post.id, post.imagePath)}
-                                            style={{
-                                                background: 'none', border: 'none', color: '#EF4444',
-                                                textDecoration: 'underline', cursor: 'pointer', fontSize: '0.75rem'
-                                            }}
-                                        >
-                                            投稿を削除
-                                        </button>
-                                    </div>
-                                </Popup>
-                            </Marker>
-                        );
-                    })}
-                </MapContainer>
+                        <MapContainer
+                            center={initialCenter}
+                            zoom={15}
+                            scrollWheelZoom={true}
+                            style={{ height: "100%", width: "100%", zIndex: 1 }}
+                            ref={mapRef}
+                        >
+                            <TileLayer
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            />
+                            <LocationMarker isPostMode={isPostMode} onMapClick={handleMapClick} />
+                            <MapClickHandler isPostMode={isPostMode} onMapClick={handleMapClick} />
+
+                            {/* Official Shelters */}
+                            {shelters.filter(s => filter === 'shelter').map(shelter => (
+                                <Marker key={shelter.id} position={[shelter.lat, shelter.lng]}>
+                                    <Popup>
+                                        <strong>{shelter.name}</strong><br />
+                                        {shelter.address}<br />
+                                        <span style={{
+                                            display: 'inline-block',
+                                            marginTop: '4px',
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            backgroundColor: shelter.pet_friendly ? 'var(--color-success)' : 'var(--color-text-sub)',
+                                            color: 'white',
+                                            fontSize: '0.75rem'
+                                        }}>
+                                            {shelter.pet_friendly ? 'ペット可' : 'ペット不可'}
+                                        </span>
+                                        {shelter.notes && <div style={{ fontSize: '0.8rem', marginTop: '4px' }}>{shelter.notes}</div>}
+                                    </Popup>
+                                </Marker>
+                            ))}
+
+                            {/* User Posts */}
+                            {filteredPosts.map(post => {
+                                const hasThanked = post.thanks?.includes(currentUser?.uid);
+                                let markerIcon = post.resolved ? resolvedIcon :
+                                    (post.type === 'danger' ? dangerIcon :
+                                        (post.type === 'shelter' ? shelterIcon : walkIcon));
+
+                                return (
+                                    <Marker
+                                        key={post.id}
+                                        position={[post.lat, post.lng]}
+                                        icon={markerIcon}
+                                        ref={(ref) => {
+                                            if (ref) {
+                                                markerRefs.current.set(post.id, ref);
+                                            } else {
+                                                markerRefs.current.delete(post.id);
+                                            }
+                                        }}
+                                        eventHandlers={{
+                                            click: () => {
+                                                setActivePostId(post.id);
+                                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                            },
+                                            popupclose: () => {
+                                                setTimeout(() => {
+                                                    setActivePostId((currentActive) => {
+                                                        if (!currentActive || currentActive === post.id) {
+                                                            // No new popup was opened, so we are actually closing. Scroll back to list.
+                                                            const el = document.getElementById(`post-item-${post.id}`);
+                                                            if (el) {
+                                                                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                            }
+                                                            return null;
+                                                        }
+                                                        return currentActive;
+                                                    });
+                                                }, 100);
+                                            }
+                                        }}
+                                    >
+                                        <Popup>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                <strong style={{ fontSize: '1.1rem', color: post.resolved ? '#9CA3AF' : 'inherit' }}>
+                                                    {post.resolved ? <strike>{post.title}</strike> : post.title}
+                                                </strong>
+                                                {post.resolved && <span style={{ fontSize: '0.75rem', backgroundColor: '#9CA3AF', color: 'white', padding: '2px 6px', borderRadius: '12px' }}>解決済</span>}
+                                            </div>
+                                            <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '2px' }}>
+                                                投稿者：{post.memberNumber ? `みまもり隊員 No.${String(post.memberNumber).padStart(3, '0')}` : 'ゲスト隊員'}
+                                            </div>
+                                            <div style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>{post.date}</div>
+
+                                            {post.imageUrl && (
+                                                <div style={{ margin: '8px 0', maxHeight: '150px', overflowY: 'auto', borderRadius: '4px', border: '1px solid #E5E7EB' }}>
+                                                    <img src={post.imageUrl} alt="添付写真" style={{ width: '100%', display: 'block', objectFit: 'contain', opacity: post.resolved ? 0.6 : 1 }} />
+                                                </div>
+                                            )}
+                                            <div style={{ margin: '8px 0', fontSize: '0.9rem' }}>{post.note}</div>
+
+                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '12px', borderTop: '1px solid #eee', paddingTop: '8px' }}>
+                                                <button
+                                                    onClick={() => handleThanks(post.id, post.thanks)}
+                                                    style={{
+                                                        background: hasThanked ? '#FDF2F8' : '#F3F4F6',
+                                                        border: hasThanked ? '1px solid #FBCFE8' : '1px solid #E5E7EB',
+                                                        color: hasThanked ? '#DB2777' : '#4B5563',
+                                                        padding: '4px 8px', borderRadius: '16px', cursor: 'pointer', fontSize: '0.85rem', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '4px'
+                                                    }}
+                                                >
+                                                    💖 {post.thanks?.length || 0}
+                                                </button>
+
+                                                {!post.resolved && (
+                                                    <button
+                                                        onClick={() => handleResolve(post.id)}
+                                                        style={{
+                                                            background: '#ECFDF5', border: '1px solid #A7F3D0', color: '#059669',
+                                                            padding: '4px 8px', borderRadius: '16px', cursor: 'pointer', fontSize: '0.85rem', flex: 1
+                                                        }}
+                                                    >
+                                                        👍 解決済に
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div style={{ textAlign: 'right', marginTop: '8px' }}>
+                                                <button
+                                                    onClick={() => deletePost(post.id, post.imagePath)}
+                                                    style={{
+                                                        background: 'none', border: 'none', color: '#EF4444',
+                                                        textDecoration: 'underline', cursor: 'pointer', fontSize: '0.75rem'
+                                                    }}
+                                                >
+                                                    投稿を削除
+                                                </button>
+                                            </div>
+                                        </Popup>
+                                    </Marker>
+                                );
+                            })}
+                        </MapContainer>
+                    </>
+                )}
             </div>
 
             <div className="filter-container" style={{ flexShrink: 0 }}>
