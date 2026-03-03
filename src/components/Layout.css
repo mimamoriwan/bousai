@@ -133,3 +133,18 @@
 [data-rsbs-scroll]::-webkit-scrollbar {
     display: none;
 }
+
+.map-top-filters {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 8px;
+    width: 100%;
+}
+
+.filter-chip {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+}
