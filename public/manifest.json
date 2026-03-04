@@ -1,0 +1,15 @@
+{
+    "short_name": "みまもりWAN",
+    "name": "みまもりWAN!!",
+    "icons": [
+        {
+            "src": "/icon.png",
+            "type": "image/png",
+            "sizes": "1080x1080"
+        }
+    ],
+    "start_url": "/",
+    "background_color": "#FFF7ED",
+    "display": "standalone",
+    "theme_color": "#F97316"
+}

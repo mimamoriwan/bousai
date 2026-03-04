@@ -156,6 +156,14 @@ const MapPage = ({ initialPostMode = false }) => {
     const mapRef = useRef(null);
     const markerRefs = useRef(new Map());
     const [activePostId, setActivePostId] = useState(null);
+    const [isMinTimeElapsed, setIsMinTimeElapsed] = useState(false);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setIsMinTimeElapsed(true);
+        }, 1500); // 最低1.5秒間はスプラッシュ画面を表示する
+        return () => clearTimeout(timer);
+    }, []);
 
     // Initial Map Location State
     const [initialCenter, setInitialCenter] = useState(null);
@@ -211,14 +219,8 @@ const MapPage = ({ initialPostMode = false }) => {
             const q = query(collection(db, 'map_pins'));
             const querySnapshot = await getDocs(q);
             const pins = [];
-            const fortyEightHours = 48 * 60 * 60 * 1000;
-            const now = Date.now();
-
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                if (data.type !== 'shelter' && data.timestamp && (now - data.timestamp > fortyEightHours)) {
-                    return;
-                }
                 pins.push({ id: doc.id, ...data });
             });
             setUserPosts(pins);
@@ -236,14 +238,8 @@ const MapPage = ({ initialPostMode = false }) => {
         const q = query(collection(db, 'map_pins'));
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const pins = [];
-            const fortyEightHours = 48 * 60 * 60 * 1000;
-            const now = Date.now();
-
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                if (data.type !== 'shelter' && data.timestamp && (now - data.timestamp > fortyEightHours)) {
-                    return;
-                }
                 pins.push({ id: doc.id, ...data });
             });
             setUserPosts(pins);
@@ -412,18 +408,38 @@ const MapPage = ({ initialPostMode = false }) => {
         <div className="map-page" style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
 
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-                {isLoadingLocation ? (
+                {(isLoadingLocation || !isMinTimeElapsed) ? (
                     <div style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                        height: '100%', backgroundColor: '#f9fafb', color: 'var(--color-primary)'
+                        height: '100%', backgroundColor: '#FFF7ED',
+                        color: 'var(--color-primary)', padding: '20px', textAlign: 'center'
                     }}>
-                        <div className="initial-spinner" style={{ width: '40px', height: '40px', borderWidth: '4px', marginBottom: '10px' }}></div>
-                        <div style={{ fontWeight: 'bold' }}>現在地を取得中...🐾</div>
+                        {/* メインビジュアル画像を表示 */}
+                        <img
+                            src="/main-visual.png"
+                            alt="みまもりWAN!!"
+                            style={{
+                                width: '100%', maxWidth: '350px',
+                                borderRadius: '16px',
+                                boxShadow: '0 8px 16px rgba(0,0,0,0.1)',
+                                marginBottom: '24px',
+                                animation: 'fadeIn 0.5s ease-in'
+                            }}
+                        />
+                        <div className="initial-spinner" style={{ width: '30px', height: '30px', borderWidth: '3px', marginBottom: '12px' }}></div>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>つくばの安全マップを準備中...🐾</div>
+
+                        <style>{`
+                            @keyframes fadeIn {
+                                from { opacity: 0; transform: translateY(10px); }
+                                to { opacity: 1; transform: translateY(0); }
+                            }
+                        `}</style>
                     </div>
                 ) : (
                     <>
                         {/* Post Mode Toggle Button */}
-                        <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 1000 }}>
+                        <div style={{ position: 'absolute', bottom: 'calc(25vh + 30px)', right: '16px', zIndex: 1000 }}>
                             <button
                                 onClick={() => {
                                     if (!isPostMode && !requireAuth('スポットの投稿')) return;
@@ -432,33 +448,49 @@ const MapPage = ({ initialPostMode = false }) => {
                                         setIsPostMode(false);
                                         setTempPost(null);
                                     } else {
-                                        setShowPostOptions(true);
+                                        setShowPostOptions(true); // action sheet
                                     }
                                 }}
                                 className="btn"
                                 style={{
                                     backgroundColor: isPostMode ? 'var(--color-danger)' : 'var(--color-primary)',
                                     color: 'white',
-                                    boxShadow: 'var(--shadow-md)'
+                                    width: '60px',
+                                    height: '60px',
+                                    borderRadius: '50%',
+                                    boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '1.8rem',
+                                    transition: 'transform 0.2s',
+                                    padding: 0
                                 }}
                             >
-                                {isPostMode ? '投稿キャンセル' : '＋ スポット投稿'}
+                                {isPostMode ? '❌' : '🐾'}
                             </button>
                         </div>
 
                         {/* Post Options Action Sheet / Modal */}
                         {showPostOptions && (
-                            <div style={{
-                                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                                backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 2000,
-                                display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
-                            }}>
-                                <div className="card" style={{
-                                    width: '100%', maxWidth: '500px', margin: 0,
-                                    borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
-                                    padding: '24px 20px', paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
-                                    animation: 'slideUp 0.3s ease-out'
-                                }}>
+                            <div
+                                style={{
+                                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                                    backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 2000,
+                                    display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+                                }}
+                                onClick={() => setShowPostOptions(false)}
+                            >
+                                <div
+                                    className="card"
+                                    style={{
+                                        width: '100%', maxWidth: '500px', margin: 0,
+                                        borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
+                                        padding: '24px 20px', paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
+                                        animation: 'slideUp 0.3s ease-out'
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                >
                                     <h3 style={{ textAlign: 'center', marginBottom: '20px', fontSize: '1.1rem' }}>投稿方法の選択</h3>
 
                                     <button
@@ -669,6 +701,7 @@ const MapPage = ({ initialPostMode = false }) => {
                             {/* User Posts */}
                             {filteredPosts.map(post => {
                                 const hasThanked = post.thanks?.includes(currentUser?.uid);
+                                const isOld = post.timestamp ? (Date.now() - post.timestamp > 48 * 60 * 60 * 1000) : false;
                                 let markerIcon = post.resolved ? resolvedIcon :
                                     (post.type === 'danger' ? dangerIcon :
                                         (post.type === 'shelter' ? shelterIcon : walkIcon));
@@ -678,6 +711,7 @@ const MapPage = ({ initialPostMode = false }) => {
                                         key={post.id}
                                         position={[post.lat, post.lng]}
                                         icon={markerIcon}
+                                        opacity={isOld ? 0.5 : 1}
                                         ref={(ref) => {
                                             if (ref) {
                                                 markerRefs.current.set(post.id, ref);
@@ -776,12 +810,12 @@ const MapPage = ({ initialPostMode = false }) => {
                 open={true}
                 blocking={false}
                 snapPoints={({ maxHeight }) => [
-                    maxHeight * 0.25, // Collapsed state (shows header and filters)
-                    maxHeight * 0.9   // Expanded state (shows the whole list)
+                    maxHeight * 0.3, // 初期状態（タブと1つ目の投稿が見える程度）
+                    maxHeight * 0.65 // 最大展開時（背後のマップが必ず上部に見えるようにする）
                 ]}
                 defaultSnap={({ snapPoints }) => snapPoints[0]}
                 header={
-                    <div style={{ padding: '8px 16px 0 16px' }}>
+                    <div style={{ padding: '8px 16px 0 16px', maxWidth: '100vw', boxSizing: 'border-box' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                             <h3 style={{ margin: 0, fontSize: '1.2rem' }}>地域の最新情報</h3>
                             <button
@@ -802,7 +836,13 @@ const MapPage = ({ initialPostMode = false }) => {
                                 🔄
                             </button>
                         </div>
-                        <div className="map-top-filters">
+                        {/* 【重要】タッチイベントがBottomSheetに吸い込まれるのを防ぐ */}
+                        <div
+                            className="map-top-filters"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onTouchStart={(e) => e.stopPropagation()}
+                            onTouchMove={(e) => e.stopPropagation()}
+                        >
                             <button className={`filter-chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>すべて</button>
                             <button className={`filter-chip ${filter === 'danger' ? 'active' : ''}`} onClick={() => setFilter('danger')}>危険・スポット</button>
                             <button className={`filter-chip ${filter === 'walk' ? 'active' : ''}`} onClick={() => setFilter('walk')}>お散歩情報</button>
@@ -818,6 +858,7 @@ const MapPage = ({ initialPostMode = false }) => {
                             <div style={{ display: 'grid', gap: 'var(--spacing-sm)' }}>
                                 {[...filteredPosts].sort((a, b) => b.timestamp - a.timestamp).map(post => {
                                     const hasThanked = post.thanks?.includes(currentUser?.uid);
+                                    const isOld = post.timestamp ? (Date.now() - post.timestamp > 48 * 60 * 60 * 1000) : false;
                                     return (
                                         <div
                                             key={post.id}
@@ -830,47 +871,53 @@ const MapPage = ({ initialPostMode = false }) => {
                                                 cursor: 'pointer',
                                                 backgroundColor: activePostId === post.id ? '#EFF6FF' : 'var(--color-surface)',
                                                 borderLeft: post.type === 'danger' ? '4px solid #F59E0B' : (post.type === 'shelter' ? '4px solid #8B5CF6' : '4px solid #10B981'),
-                                                transition: 'background-color 0.2s'
+                                                transition: 'background-color 0.2s',
+                                                opacity: isOld ? 0.6 : 1
                                             }}
                                         >
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <div style={{ fontWeight: 'bold', color: post.resolved ? '#9CA3AF' : 'inherit', textDecoration: post.resolved ? 'line-through' : 'none' }}>
-                                                    {post.type === 'danger' ? '⚠️' : (post.type === 'shelter' ? '🎒' : '🐾')} {post.title}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {/* 上段：タイトルと日付 */}
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                    <div style={{ fontWeight: 'bold', color: post.resolved ? '#9CA3AF' : 'inherit', textDecoration: post.resolved ? 'line-through' : 'none', flex: 1, paddingRight: '8px' }}>
+                                                        {post.type === 'danger' ? '⚠️' : (post.type === 'shelter' ? '🎒' : '🐾')} {post.title}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-sub)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                                        {post.date}
+                                                    </div>
                                                 </div>
-                                                {post.resolved && <span style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#9CA3AF', color: 'white' }}>解決済</span>}
-                                            </div>
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginTop: '4px', display: 'flex', justifyContent: 'space-between' }}>
-                                                <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '8px' }}>
+
+                                                {/* 中段：詳細メモ */}
+                                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-sub)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                                                     {post.note || '詳細なし'}
-                                                </span>
-                                                <span>{post.date}</span>
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-sub)', display: 'flex', gap: '10px' }}>
-                                                    {post.imageUrl && <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>📷 写真あり</span>}
                                                 </div>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation(); // Prevent opening the map pin when clicking thanks
-                                                        handleThanks(post.id, post.thanks);
-                                                    }}
-                                                    style={{
-                                                        background: hasThanked ? '#FDF2F8' : 'transparent',
-                                                        border: hasThanked ? '1px solid #FBCFE8' : '1px solid #E5E7EB',
-                                                        color: hasThanked ? '#DB2777' : '#4B5563',
-                                                        padding: '2px 8px',
-                                                        borderRadius: '12px',
-                                                        cursor: 'pointer',
-                                                        fontSize: '0.8rem',
-                                                        display: 'flex',
-                                                        justifyContent: 'center',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                >
-                                                    💖 {post.thanks?.length || 0}
-                                                </button>
+
+                                                {/* 下段：写真アイコンとハートボタン */}
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                                                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)' }}>
+                                                        {post.imageUrl && <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>📷 写真あり</span>}
+                                                    </div>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleThanks(post.id, post.thanks);
+                                                        }}
+                                                        style={{
+                                                            background: hasThanked ? '#FDF2F8' : 'transparent',
+                                                            border: hasThanked ? '1px solid #FBCFE8' : '1px solid #E5E7EB',
+                                                            color: hasThanked ? '#DB2777' : '#4B5563',
+                                                            padding: '4px 12px', /* 少し押しやすく広げる */
+                                                            borderRadius: '16px',
+                                                            cursor: 'pointer',
+                                                            fontSize: '0.85rem',
+                                                            display: 'flex',
+                                                            justifyContent: 'center',
+                                                            alignItems: 'center',
+                                                            gap: '4px'
+                                                        }}
+                                                    >
+                                                        💖 {post.thanks?.length || 0}
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     );
