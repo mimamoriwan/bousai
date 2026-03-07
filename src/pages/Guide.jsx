@@ -50,6 +50,10 @@ const GuidePage = () => {
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <li style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
                         <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginBottom: '4px' }}>2026/03/07</div>
+                        <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>ピンが密集している場所でも正確に投稿できるよう、マップの中央に照準（📍）を合わせて場所を選択する方式に大改修しました🎯</div>
+                    </li>
+                    <li style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginBottom: '4px' }}>2026/03/07</div>
                         <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>アプリ起動時のマップのズーム具合を、ご近所が見渡しやすいサイズに調整しました🗺️</div>
                     </li>
                     <li style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
