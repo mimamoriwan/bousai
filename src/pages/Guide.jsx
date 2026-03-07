@@ -7,67 +7,91 @@ const GuidePage = () => {
 
     return (
         <div className="guide-page" style={{ paddingBottom: 'var(--spacing-xl)' }}>
-            <h2 style={{ marginBottom: 'var(--spacing-md)' }}>みまもりWANとは？</h2>
+            <h2 style={{ marginBottom: 'var(--spacing-md)', fontSize: '1.3rem' }}>使い方とお知らせ</h2>
+
+            {/* 1. アプリの使い方（ピンの意味） */}
             <div className="card" style={{ marginBottom: 'var(--spacing-lg)' }}>
-                <p style={{ lineHeight: '1.6', marginBottom: 'var(--spacing-md)' }}>
-                    愛犬がお散歩中に何でも口にしてしまう危険を防ぎたい、という想いから生まれました。
+                <h3 style={{ marginBottom: 'var(--spacing-sm)', fontSize: '1.1rem' }}>🎉 みまもりWANへようこそ！</h3>
+                <p style={{ lineHeight: '1.6', marginBottom: 'var(--spacing-md)', fontSize: '0.95rem' }}>
+                    愛犬のお散歩コースの情報をみんなで共有するアプリです。いつものお散歩が、もっと安全で楽しい時間になりますように。
                 </p>
-                <p style={{ lineHeight: '1.6', marginBottom: 'var(--spacing-md)' }}>
-                    例えば、いつものお散歩から帰ってきたら愛犬の足がただれていた…なんてことが起きたら、びっくりして病院に駆け込みますよね。<br />
-                    でももし事前に、「あの草むら、さっき除草剤をまいていたよ」という情報があれば、近づかないように気をつけることができます。
-                </p>
-                <p style={{ lineHeight: '1.6', marginBottom: 'var(--spacing-md)' }}>
-                    自宅の庭先に除草剤をまくこと自体は、決して悪いことではありません。ただ、その場面を目撃した人が「しばらく立ち入らない方がいいよ」と教えてくれたら、未然に防げる怪我や事故がたくさんあります。
-                </p>
-                <p style={{ lineHeight: '1.6', marginBottom: 'var(--spacing-md)', fontSize: '0.95rem', background: '#F9FAFB', padding: 'var(--spacing-sm)', borderRadius: '8px' }}>
-                    『あそこにガラスが落ちていた』<br />
-                    『ここの花壇、今朝除草剤をかけていたよ』<br />
-                    『よく分からないけど、このあたりめっちゃくん活するよ』など。
-                </p>
-                <p style={{ lineHeight: '1.6' }}>
-                    そんな、普段のお散歩で気づいたちょっとしたリアルな情報を、地域の飼い主さん同士で共有できたらいいなと思い、このアプリを開発しました。<br />
-                    合言葉は<strong>『知っていれば予防できる』</strong>です。
-                </p>
-            </div>
 
-            <h2 style={{ marginBottom: 'var(--spacing-md)' }}>みまもり隊員について</h2>
-            <div className="card" style={{ marginBottom: 'var(--spacing-xl)' }}>
-                <p style={{ lineHeight: '1.6' }}>
-                    このサービスを使ってくれる地域のワンコたちを<strong>「みまもり隊員」</strong>と呼んでいます。<br />
-                    いつものお散歩コースを歩きながら、みんなで地域の安全を作りましょう！「おや？」と気づいたことがあれば、ぜひ気軽に共有していきましょう🐾
-                </p>
-            </div>
+                <h4 style={{ fontSize: '0.95rem', marginBottom: '8px', color: 'var(--color-primary)' }}>📍 投稿できるスポットの種類</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '8px' }}>
+                        <span style={{ fontSize: '1.4rem' }}>🐾</span>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: '#374151' }}>お散歩情報</div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--color-text-sub)', marginTop: '2px' }}>新しい発見、おすすめの「くん活」スポットなど</div>
+                        </div>
+                    </div>
 
-            <h2 style={{ marginBottom: 'var(--spacing-md)' }}>簡単な使い方</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-xl)' }}>
-                <div className="card" style={{ margin: 0, borderLeft: '4px solid var(--color-primary)' }}>
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--color-primary)' }}>
-                        <span style={{ fontSize: '1.25rem' }}>①</span> お散歩前にマップをチェック 🗺️
-                    </h3>
-                    <p style={{ lineHeight: '1.6', fontSize: '0.9rem' }}>
-                        「今日はどこを歩こうかな？」お出かけ前に、マップを開いて危険な場所や新しい寄り道スポットを確認しましょう。
-                    </p>
-                </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px', backgroundColor: '#FEF2F2', borderRadius: '8px' }}>
+                        <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: '#DC2626' }}>危険・注意</div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--color-text-sub)', marginTop: '2px' }}>ガラスの破片、除草剤、その他気をつけるべき場所</div>
+                        </div>
+                    </div>
 
-                <div className="card" style={{ margin: 0, borderLeft: '4px solid var(--color-primary)' }}>
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--color-primary)' }}>
-                        <span style={{ fontSize: '1.25rem' }}>②</span> 気づいたことを「＋ スポット投稿」 📸
-                    </h3>
-                    <p style={{ lineHeight: '1.6', fontSize: '0.9rem' }}>
-                        ガラスの破片、除草剤、素敵な「くん活」スポットなどを見つけたら、マップ画面のボタンから写真と一緒に気軽にシェア！
-                    </p>
-                </div>
-
-                <div className="card" style={{ margin: 0, borderLeft: '4px solid var(--color-primary)' }}>
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--color-primary)' }}>
-                        <span style={{ fontSize: '1.25rem' }}>③</span> みんなでリアクション 💖👍
-                    </h3>
-                    <p style={{ lineHeight: '1.6', fontSize: '0.9rem' }}>
-                        役に立つ情報には「💖ありがとう」を。危険箇所が片付いて安全になっていたら「👍解決済」を押して、みんなでマップを最新の状態にアップデートしましょう！
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px', backgroundColor: '#F0FDF4', borderRadius: '8px' }}>
+                        <span style={{ fontSize: '1.4rem' }}>🎒</span>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: '#16A34A' }}>防災・避難所</div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--color-text-sub)', marginTop: '2px' }}>ペットと一緒に避難できる施設や防災に役立つ情報</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
+            {/* 2. 最近のアップデート履歴 */}
+            <h2 style={{ marginBottom: 'var(--spacing-md)', fontSize: '1.1rem', color: 'var(--color-text)' }}>🕒 最近のアップデート</h2>
+            <div className="card" style={{ marginBottom: 'var(--spacing-lg)' }}>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <li style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginBottom: '4px' }}>2026/03/07</div>
+                        <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>アプリ起動時のマップのズーム具合を、ご近所が見渡しやすいサイズに調整しました🗺️</div>
+                    </li>
+                    <li style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginBottom: '4px' }}>2026/03/05</div>
+                        <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>マイページに「みまもり活動実績」と「最近の投稿」を表示する機能を追加しました🐾</div>
+                    </li>
+                    <li>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginBottom: '4px' }}>2026/03/04</div>
+                        <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>スマホのホーム画面に追加して全画面起動ができる「PWA」に対応しました📱</div>
+                    </li>
+                </ul>
+            </div>
+
+            {/* 3. 公式お知らせ（LINE VOOM）へのリンクボタン */}
+            <div style={{ marginBottom: 'var(--spacing-xl)' }}>
+                <a
+                    href="https://linevoom.line.me/user/_dU3Mbg3U7MUhaAyH-yTqWOkQQyc7ITrUn5tubPQ"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        backgroundColor: '#06C755',
+                        color: 'white',
+                        padding: '16px',
+                        borderRadius: '9999px',
+                        textDecoration: 'none',
+                        fontWeight: 'bold',
+                        fontSize: '1.05rem',
+                        boxShadow: '0 4px 12px rgba(6, 199, 85, 0.3)',
+                    }}
+                >
+                    もっと詳しいお知らせを見る（LINE）
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line>
+                    </svg>
+                </a>
+            </div>
+
+            {/* いざという時の防災ガイド（既存のアコーディオンを維持） */}
             <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 'var(--spacing-md)' }}>
                 <button
                     onClick={() => setIsAccordionOpen(!isAccordionOpen)}
