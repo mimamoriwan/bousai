@@ -33,6 +33,7 @@ export default defineConfig({
       workbox: {
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/__/],
+        ignoreURLParametersMatching: [/.*/],
         cleanupOutdatedCaches: true
       },
       devOptions: {
