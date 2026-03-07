@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, storage } from '../firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
 
 const Profile = () => {
-    const { currentUser, linkWithGoogle, loginWithGoogle, logout } = useAuth();
+    const { currentUser, memberNumber, linkWithGoogle, loginWithGoogle, logout } = useAuth();
+
+    const [userPosts, setUserPosts] = useState([]);
+    const [thanksCount, setThanksCount] = useState(0);
 
     const [profile, setProfile] = useState(() => {
         // Fallback initialized later in useEffect based on currentUser
@@ -52,6 +55,32 @@ const Profile = () => {
         };
         fetchProfile();
     }, [currentUser]);
+
+    useEffect(() => {
+        const fetchUserPosts = async () => {
+            if (currentUser && memberNumber) {
+                try {
+                    const q = query(collection(db, 'map_pins'), where('memberNumber', '==', memberNumber));
+                    const querySnapshot = await getDocs(q);
+                    const posts = [];
+                    let totalThanks = 0;
+                    querySnapshot.forEach((doc) => {
+                        const data = doc.data();
+                        posts.push({ id: doc.id, ...data });
+                        if (data.thanks && data.thanks.length) {
+                            totalThanks += data.thanks.length;
+                        }
+                    });
+                    posts.sort((a, b) => b.timestamp - a.timestamp);
+                    setUserPosts(posts);
+                    setThanksCount(totalThanks);
+                } catch (err) {
+                    console.error("Error fetching user posts:", err);
+                }
+            }
+        };
+        fetchUserPosts();
+    }, [currentUser, memberNumber]);
     if (!currentUser || currentUser.isAnonymous) {
         return (
             <div className="profile-page" style={{ textAlign: 'center', padding: 'var(--spacing-lg) var(--spacing-md)' }}>
@@ -342,6 +371,74 @@ const Profile = () => {
                     </div>
                 )}
             </div>
+
+            {/* みまもり活動実績 */}
+            <div className="card" style={{ marginTop: 'var(--spacing-md)', borderLeft: '4px solid var(--color-primary)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
+                    <h3 style={{ margin: 0 }}>みまもり活動実績</h3>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>ACTIVITY</span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🐾</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)' }}>発見したスポット</div>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--color-primary)' }}>{userPosts.length} <span style={{ fontSize: '0.9rem', color: 'var(--color-text-base)' }}>件</span></div>
+                    </div>
+
+                    <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>💖</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)' }}>もらったありがとう</div>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#DB2777' }}>{thanksCount} <span style={{ fontSize: '0.9rem', color: 'var(--color-text-base)' }}>件</span></div>
+                    </div>
+                </div>
+            </div>
+
+            {/* わたしの投稿履歴 */}
+            {userPosts.length > 0 && (
+                <div style={{ marginTop: 'var(--spacing-lg)' }}>
+                    <h3 style={{ marginBottom: 'var(--spacing-md)' }}>最近の投稿</h3>
+                    <div style={{ display: 'grid', gap: 'var(--spacing-sm)' }}>
+                        {userPosts.slice(0, 5).map(post => {
+                            return (
+                                <div
+                                    key={post.id}
+                                    className="card"
+                                    style={{
+                                        padding: 'var(--spacing-sm) var(--spacing-md)',
+                                        margin: 0,
+                                        borderLeft: post.type === 'danger' ? '4px solid #F59E0B' : (post.type === 'shelter' ? '4px solid #8B5CF6' : '4px solid #10B981')
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <div style={{ fontWeight: 'bold', color: post.resolved ? '#9CA3AF' : 'inherit', textDecoration: post.resolved ? 'line-through' : 'none', flex: 1, paddingRight: '8px' }}>
+                                                {post.type === 'danger' ? '⚠️' : (post.type === 'shelter' ? '🎒' : '🐾')} {post.title}
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-sub)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                                {post.date}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-sub)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                            {post.note || '詳細なし'}
+                                        </div>
+
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)' }}>
+                                                {post.imageUrl && <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>📷 写真あり</span>}
+                                            </div>
+                                            <div style={{ fontSize: '0.85rem', color: '#DB2777', fontWeight: 'bold' }}>
+                                                💖 {post.thanks?.length || 0}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             <div style={{ marginTop: 'var(--spacing-lg)', marginBottom: 'var(--spacing-lg)' }}>
                 <a

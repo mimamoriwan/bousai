@@ -664,7 +664,7 @@ const MapPage = ({ initialPostMode = false }) => {
 
                         <MapContainer
                             center={initialCenter}
-                            zoom={15}
+                            zoom={16}
                             scrollWheelZoom={true}
                             style={{ height: "100%", width: "100%", zIndex: 1 }}
                             ref={mapRef}
