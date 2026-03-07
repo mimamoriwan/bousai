@@ -130,6 +130,7 @@ const LocationMarker = ({ isPostMode, onMapClick }) => {
 const MapPage = () => {
     // User Posts State (now driven by Firestore)
     const [userPosts, setUserPosts] = useState([]);
+    const [activeWalkers, setActiveWalkers] = useState([]); // Array of active walking users
     const [filter, setFilter] = useState('all');
 
     const [isSelectingLocation, setIsSelectingLocation] = useState(false);
@@ -236,7 +237,27 @@ const MapPage = () => {
             console.error("Error fetching pins: ", error);
         });
 
-        return () => unsubscribe();
+        // 🐶 Fetch active walkers (Osanpo Now feature)
+        // Currently querying all users and filtering on client side for MVP to avoid index requirements
+        // A composite index on `isWalking` would be required for a strictly targeted server query.
+        const walkersQuery = query(collection(db, 'users'));
+        const unsubscribeWalkers = onSnapshot(walkersQuery, (querySnapshot) => {
+            const walkers = [];
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                if (data.isWalking === true) {
+                    walkers.push({ id: doc.id, ...data });
+                }
+            });
+            setActiveWalkers(walkers);
+        }, (error) => {
+            console.error("Error fetching active walkers: ", error);
+        });
+
+        return () => {
+            unsubscribe();
+            unsubscribeWalkers();
+        };
     }, []);
 
     const handleMapClick = (latlng) => {
@@ -943,6 +964,65 @@ const MapPage = () => {
                                 🔄
                             </button>
                         </div>
+
+                        {/* Stories-like Active Walkers UI */}
+                        {activeWalkers.length > 0 ? (
+                            <div style={{
+                                display: 'flex',
+                                overflowX: 'auto',
+                                gap: '12px',
+                                paddingBottom: '12px',
+                                marginBottom: '4px',
+                                touchAction: 'pan-x',
+                                scrollbarWidth: 'none', /* Firefox */
+                            }} className="map-top-filters">
+                                {activeWalkers.map(walker => (
+                                    <div key={walker.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '60px' }}>
+                                        <div style={{
+                                            width: '48px',
+                                            height: '48px',
+                                            borderRadius: '50%',
+                                            background: 'linear-gradient(45deg, #10B981, #34D399)',
+                                            padding: '2px', // Border gradient thickness
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                        }}>
+                                            <div style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                borderRadius: '50%',
+                                                backgroundColor: 'white',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                overflow: 'hidden'
+                                            }}>
+                                                {walker.profileIconUrl ? (
+                                                    <img src={walker.profileIconUrl} alt={walker.petName || 'ペット'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                ) : (
+                                                    <span style={{ fontSize: '1.5rem' }}>🐶</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <span style={{ fontSize: '0.65rem', color: 'var(--color-text-sub)', marginTop: '4px', whiteSpace: 'nowrap', maxWidth: '60px', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>
+                                            {walker.petName || walker.displayName || '隊員'}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div style={{
+                                textAlign: 'center',
+                                padding: '12px 0',
+                                marginBottom: '4px',
+                                color: '#9CA3AF',
+                                fontSize: '0.8rem',
+                                backgroundColor: '#F9FAFB',
+                                borderRadius: '8px'
+                            }}>
+                                現在パトロール中の隊員はいません🐾
+                            </div>
+                        )}
+
                         {/* 【重要】タッチイベントがBottomSheetに吸い込まれるのを防ぐ */}
                         <div
                             className="map-top-filters"
