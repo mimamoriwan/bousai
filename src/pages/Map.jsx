@@ -456,12 +456,6 @@ const MapPage = () => {
                             @keyframes fadeIn {
                                 from { opacity: 0; transform: translateY(10px); }
                                 to { opacity: 1; transform: translateY(0); }
-                            }
-                            @keyframes ripple {
-                                0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-                                70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
-                                100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-                            }
                         `}</style>
                     </div>
                 ) : (
@@ -474,9 +468,9 @@ const MapPage = () => {
                                         if (!requireAuth('アクションメニューを開く')) return;
                                         setShowPostOptions(true);
                                     }}
-                                    className="btn"
+                                    className={`btn ${isWalking ? 'active-pulse' : ''}`}
                                     style={{
-                                        backgroundColor: isWalking ? '#047857' : 'var(--color-primary)', // Dark Green active, Primary Orange inactive
+                                        backgroundColor: !isWalking ? 'var(--color-primary)' : undefined, // Inherit CSS when active
                                         color: 'white',
                                         width: '60px',
                                         height: '60px',
@@ -487,8 +481,7 @@ const MapPage = () => {
                                         justifyContent: 'center',
                                         fontSize: '1.8rem',
                                         transition: 'background-color 0.3s, transform 0.2s',
-                                        padding: 0,
-                                        animation: isWalking ? 'ripple 2s infinite' : 'none'
+                                        padding: 0
                                     }}
                                 >
                                     🐾

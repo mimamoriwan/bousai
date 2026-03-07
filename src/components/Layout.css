@@ -152,6 +152,28 @@
     display: none;
 }
 
+/* お散歩なう アクティブ時の波紋アニメーション */
+.active-pulse {
+    background-color: #047857 !important;
+    /* ダークグリーンに固定 */
+    box-shadow: none !important;
+    animation: ripple 1.5s infinite !important;
+}
+
+@keyframes ripple {
+    0% {
+        box-shadow: 0 0 0 0 rgba(4, 120, 87, 0.7);
+    }
+
+    70% {
+        box-shadow: 0 0 0 20px rgba(4, 120, 87, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(4, 120, 87, 0);
+    }
+}
+
 .filter-chip {
     flex: 0 0 auto !important;
     white-space: nowrap !important;
