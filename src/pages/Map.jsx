@@ -127,24 +127,12 @@ const LocationMarker = ({ isPostMode, onMapClick }) => {
     );
 };
 
-// Component to handle map clicks for adding posts
-const MapClickHandler = ({ isPostMode, onMapClick }) => {
-    useMapEvents({
-        click: (e) => {
-            if (isPostMode) {
-                onMapClick(e.latlng);
-            }
-        },
-    });
-    return null;
-};
-
-const MapPage = ({ initialPostMode = false }) => {
+const MapPage = () => {
     // User Posts State (now driven by Firestore)
     const [userPosts, setUserPosts] = useState([]);
     const [filter, setFilter] = useState('all');
 
-    const [isPostMode, setIsPostMode] = useState(initialPostMode);
+    const [isSelectingLocation, setIsSelectingLocation] = useState(false);
     const [showPostOptions, setShowPostOptions] = useState(false);
     const [tempPost, setTempPost] = useState(null); // { lat, lng }
     const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null });
@@ -303,7 +291,7 @@ const MapPage = ({ initialPostMode = false }) => {
 
             // 3. Reset UI state on success
             setTempPost(null);
-            setIsPostMode(false);
+            setIsSelectingLocation(false);
             setPostForm({ type: 'danger', title: '', note: '', image: null });
             setIsProcessingImage(false);
 
@@ -438,38 +426,34 @@ const MapPage = ({ initialPostMode = false }) => {
                     </div>
                 ) : (
                     <>
-                        {/* Post Mode Toggle Button */}
-                        <div style={{ position: 'absolute', bottom: 'calc(25vh + 30px)', right: '16px', zIndex: 1000 }}>
-                            <button
-                                onClick={() => {
-                                    if (!isPostMode && !requireAuth('スポットの投稿')) return;
-
-                                    if (isPostMode) {
-                                        setIsPostMode(false);
-                                        setTempPost(null);
-                                    } else {
+                        {/* Post Mode Toggle Button (FAB) */}
+                        {!isSelectingLocation && (
+                            <div style={{ position: 'absolute', bottom: 'calc(25vh + 30px)', right: '16px', zIndex: 1000 }}>
+                                <button
+                                    onClick={() => {
+                                        if (!requireAuth('スポットの投稿')) return;
                                         setShowPostOptions(true); // action sheet
-                                    }
-                                }}
-                                className="btn"
-                                style={{
-                                    backgroundColor: isPostMode ? 'var(--color-danger)' : 'var(--color-primary)',
-                                    color: 'white',
-                                    width: '60px',
-                                    height: '60px',
-                                    borderRadius: '50%',
-                                    boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: '1.8rem',
-                                    transition: 'transform 0.2s',
-                                    padding: 0
-                                }}
-                            >
-                                {isPostMode ? '❌' : '🐾'}
-                            </button>
-                        </div>
+                                    }}
+                                    className="btn"
+                                    style={{
+                                        backgroundColor: 'var(--color-primary)',
+                                        color: 'white',
+                                        width: '60px',
+                                        height: '60px',
+                                        borderRadius: '50%',
+                                        boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '1.8rem',
+                                        transition: 'transform 0.2s',
+                                        padding: 0
+                                    }}
+                                >
+                                    🐾
+                                </button>
+                            </div>
+                        )}
 
                         {/* Post Options Action Sheet / Modal */}
                         {showPostOptions && (
@@ -525,7 +509,7 @@ const MapPage = ({ initialPostMode = false }) => {
                                     <button
                                         onClick={() => {
                                             setShowPostOptions(false);
-                                            setIsPostMode(true);
+                                            setIsSelectingLocation(true);
                                         }}
                                         className="btn"
                                         style={{ width: '100%', marginBottom: '16px', fontSize: '1.1rem', padding: '16px', backgroundColor: '#F3F4F6', color: '#1F2937', borderRadius: '12px', border: '1px solid #E5E7EB' }}
@@ -550,14 +534,83 @@ const MapPage = ({ initialPostMode = false }) => {
                             </div>
                         )}
 
-                        {isPostMode && (
-                            <div style={{
-                                position: 'absolute', top: '60px', left: '10px', right: '10px', zIndex: 1000,
-                                backgroundColor: 'rgba(255, 255, 255, 0.9)', padding: '10px', borderRadius: '8px',
-                                textAlign: 'center', fontSize: '0.9rem', border: '2px solid var(--color-primary)'
-                            }}>
-                                地図上の地点をタップして登録してください
-                            </div>
+                        {/* Location Selection Overlay UI */}
+                        {isSelectingLocation && (
+                            <>
+                                {/* Center Target Crosshair */}
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '50%',
+                                    left: '50%',
+                                    transform: 'translate(-50%, -100%)', // Lift slightly so the pin tip points to center
+                                    zIndex: 1500,
+                                    pointerEvents: 'none',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    filter: 'drop-shadow(0px 4px 4px rgba(0,0,0,0.3))'
+                                }}>
+                                    <div style={{ fontSize: '3rem', lineHeight: '1' }}>📍</div>
+                                </div>
+
+                                {/* Floating Action Buttons */}
+                                <div style={{
+                                    position: 'absolute',
+                                    bottom: '30px', /* Bottom sheet/tab bar clearance */
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    zIndex: 1000,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '12px',
+                                    width: '90%',
+                                    maxWidth: '300px',
+                                    paddingBottom: 'env(safe-area-inset-bottom)'
+                                }}>
+                                    <button
+                                        className="btn card"
+                                        style={{
+                                            backgroundColor: 'var(--color-primary)',
+                                            color: 'white',
+                                            fontWeight: 'bold',
+                                            fontSize: '1.1rem',
+                                            padding: '16px',
+                                            borderRadius: '9999px',
+                                            margin: 0,
+                                            textAlign: 'center',
+                                            border: 'none',
+                                            boxShadow: '0 4px 12px rgba(249, 115, 22, 0.4)'
+                                        }}
+                                        onClick={() => {
+                                            if (mapRef.current) {
+                                                const center = mapRef.current.getCenter();
+                                                setTempPost({ lat: center.lat, lng: center.lng });
+                                            }
+                                        }}
+                                    >
+                                        📍 ここで決定
+                                    </button>
+                                    <button
+                                        className="btn card"
+                                        style={{
+                                            backgroundColor: 'white',
+                                            color: 'var(--color-text-sub)',
+                                            fontWeight: 'bold',
+                                            fontSize: '1rem',
+                                            padding: '12px',
+                                            borderRadius: '9999px',
+                                            margin: 0,
+                                            textAlign: 'center',
+                                            border: 'none',
+                                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                                        }}
+                                        onClick={() => setIsSelectingLocation(false)}
+                                    >
+                                        キャンセル
+                                    </button>
+                                </div>
+                            </>
                         )}
 
                         {/* Post Form Modal */}
@@ -673,8 +726,7 @@ const MapPage = ({ initialPostMode = false }) => {
                                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             />
-                            <LocationMarker isPostMode={isPostMode} onMapClick={handleMapClick} />
-                            <MapClickHandler isPostMode={isPostMode} onMapClick={handleMapClick} />
+                            <LocationMarker />
 
                             {/* Official Shelters */}
                             {shelters.filter(s => filter === 'shelter').map(shelter => (
@@ -807,7 +859,7 @@ const MapPage = ({ initialPostMode = false }) => {
             </div>
 
             <BottomSheet
-                open={true}
+                open={!isSelectingLocation}
                 blocking={false}
                 snapPoints={({ maxHeight }) => [
                     maxHeight * 0.3, // 初期状態（タブと1つ目の投稿が見える程度）
@@ -850,7 +902,7 @@ const MapPage = ({ initialPostMode = false }) => {
                         </div>
                     </div>
                 }
-                style={{ zIndex: 10 }}
+                style={{ zIndex: 10, display: isSelectingLocation ? 'none' : 'block' }}
             >
                 <div style={{ padding: '0 var(--spacing-md)', paddingBottom: '120px' }}>
                     <PullToRefresh onRefresh={handleRefresh} pullingContent="" refreshingContent={<div style={{ textAlign: 'center', padding: '10px', color: 'var(--color-text-sub)' }}>更新中...</div>}>
