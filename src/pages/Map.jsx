@@ -466,19 +466,21 @@ const MapPage = () => {
                     </div>
                 ) : (
                     <>
-                        {/* Start/End Walk Toggle Button (FAB) */}
+                        {/* Action Menu (FAB) */}
                         {!isSelectingLocation && (
-                            <div style={{ position: 'absolute', bottom: 'calc(25vh + 106px)', right: '16px', zIndex: 1000 }}>
+                            <div style={{ position: 'absolute', bottom: 'calc(25vh + 30px)', right: '16px', zIndex: 1000 }}>
                                 <button
-                                    onClick={handleToggleWalk}
-                                    className="btn card"
+                                    onClick={() => {
+                                        if (!requireAuth('アクションメニューを開く')) return;
+                                        setShowPostOptions(true);
+                                    }}
+                                    className="btn"
                                     style={{
-                                        backgroundColor: isWalking ? '#047857' : '#F59E0B', // Dark Green active, Orange inactive
+                                        backgroundColor: isWalking ? '#047857' : 'var(--color-primary)', // Dark Green active, Primary Orange inactive
                                         color: 'white',
                                         width: '60px',
                                         height: '60px',
                                         borderRadius: '50%',
-                                        border: 'none',
                                         boxShadow: isWalking ? 'none' : '0 4px 10px rgba(0,0,0,0.3)',
                                         display: 'flex',
                                         alignItems: 'center',
@@ -486,37 +488,7 @@ const MapPage = () => {
                                         fontSize: '1.8rem',
                                         transition: 'background-color 0.3s, transform 0.2s',
                                         padding: 0,
-                                        margin: 0,
                                         animation: isWalking ? 'ripple 2s infinite' : 'none'
-                                    }}
-                                >
-                                    🐶
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Post Mode Toggle Button (FAB) */}
-                        {!isSelectingLocation && (
-                            <div style={{ position: 'absolute', bottom: 'calc(25vh + 30px)', right: '16px', zIndex: 1000 }}>
-                                <button
-                                    onClick={() => {
-                                        if (!requireAuth('スポットの投稿')) return;
-                                        setShowPostOptions(true); // action sheet
-                                    }}
-                                    className="btn"
-                                    style={{
-                                        backgroundColor: 'var(--color-primary)',
-                                        color: 'white',
-                                        width: '60px',
-                                        height: '60px',
-                                        borderRadius: '50%',
-                                        boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        fontSize: '1.8rem',
-                                        transition: 'transform 0.2s',
-                                        padding: 0
                                     }}
                                 >
                                     🐾
@@ -544,7 +516,7 @@ const MapPage = () => {
                                     }}
                                     onClick={(e) => e.stopPropagation()}
                                 >
-                                    <h3 style={{ textAlign: 'center', marginBottom: '20px', fontSize: '1.1rem' }}>投稿方法の選択</h3>
+                                    <h3 style={{ textAlign: 'center', marginBottom: '20px', fontSize: '1.1rem' }}>アクションを選択</h3>
 
                                     <button
                                         onClick={() => {
@@ -584,6 +556,27 @@ const MapPage = () => {
                                         style={{ width: '100%', marginBottom: '16px', fontSize: '1.1rem', padding: '16px', backgroundColor: '#F3F4F6', color: '#1F2937', borderRadius: '12px', border: '1px solid #E5E7EB' }}
                                     >
                                         🗺️ 地図から場所を選んで報告する
+                                    </button>
+
+                                    <button
+                                        onClick={() => {
+                                            setShowPostOptions(false);
+                                            handleToggleWalk();
+                                        }}
+                                        className="btn"
+                                        style={{
+                                            width: '100%',
+                                            marginBottom: '16px',
+                                            fontSize: '1.1rem',
+                                            padding: '16px',
+                                            backgroundColor: isWalking ? '#FEF2F2' : '#F0FDF4',
+                                            color: isWalking ? '#DC2626' : '#16A34A',
+                                            borderRadius: '12px',
+                                            border: `1px solid ${isWalking ? '#FCA5A5' : '#86EFAC'}`,
+                                            fontWeight: 'bold'
+                                        }}
+                                    >
+                                        {isWalking ? '🛑 お散歩を終了する' : '🐶 お散歩を開始する'}
                                     </button>
 
                                     <button
