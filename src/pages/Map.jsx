@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import shelters from '../data/shelters.json';
 import { db, storage } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, updateDoc, arrayUnion, arrayRemove, getDocs } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, query, updateDoc, arrayUnion, arrayRemove, getDocs, setDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -133,6 +133,7 @@ const MapPage = () => {
     const [filter, setFilter] = useState('all');
 
     const [isSelectingLocation, setIsSelectingLocation] = useState(false);
+    const [isWalking, setIsWalking] = useState(false);
     const [showPostOptions, setShowPostOptions] = useState(false);
     const [tempPost, setTempPost] = useState(null); // { lat, lng }
     const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null });
@@ -240,6 +241,40 @@ const MapPage = () => {
 
     const handleMapClick = (latlng) => {
         setTempPost(latlng);
+    };
+
+    const handleToggleWalk = async () => {
+        if (!currentUser) return;
+
+        if (isWalking) {
+            if (window.confirm('みまもり活動を終了しますか？')) {
+                try {
+                    await setDoc(doc(db, 'users', currentUser.uid), {
+                        isWalking: false,
+                        walkStartTime: null
+                    }, { merge: true });
+                    setIsWalking(false);
+                    alert("お散歩を終了しました。お疲れ様でした！");
+                } catch (error) {
+                    console.error("Error ending walk:", error);
+                    alert("お散歩状態の解除に失敗しました。");
+                }
+            }
+        } else {
+            if (window.confirm('みまもり活動（お散歩）を開始しますか？')) {
+                try {
+                    await setDoc(doc(db, 'users', currentUser.uid), {
+                        isWalking: true,
+                        walkStartTime: serverTimestamp()
+                    }, { merge: true });
+                    setIsWalking(true);
+                    alert("お散歩に出発しました！🐾\n（ご近所のマップに30分間表示されます）");
+                } catch (error) {
+                    console.error("Error starting walk:", error);
+                    alert("お散歩の開始に失敗しました。");
+                }
+            }
+        }
     };
 
     const handlePostSubmit = async (e) => {
@@ -422,10 +457,44 @@ const MapPage = () => {
                                 from { opacity: 0; transform: translateY(10px); }
                                 to { opacity: 1; transform: translateY(0); }
                             }
+                            @keyframes ripple {
+                                0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+                                70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
+                                100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+                            }
                         `}</style>
                     </div>
                 ) : (
                     <>
+                        {/* Start/End Walk Toggle Button (FAB) */}
+                        {!isSelectingLocation && (
+                            <div style={{ position: 'absolute', bottom: 'calc(25vh + 106px)', right: '16px', zIndex: 1000 }}>
+                                <button
+                                    onClick={handleToggleWalk}
+                                    className="btn card"
+                                    style={{
+                                        backgroundColor: isWalking ? '#047857' : '#F59E0B', // Dark Green active, Orange inactive
+                                        color: 'white',
+                                        width: '60px',
+                                        height: '60px',
+                                        borderRadius: '50%',
+                                        border: 'none',
+                                        boxShadow: isWalking ? 'none' : '0 4px 10px rgba(0,0,0,0.3)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '1.8rem',
+                                        transition: 'background-color 0.3s, transform 0.2s',
+                                        padding: 0,
+                                        margin: 0,
+                                        animation: isWalking ? 'ripple 2s infinite' : 'none'
+                                    }}
+                                >
+                                    🐶
+                                </button>
+                            </div>
+                        )}
+
                         {/* Post Mode Toggle Button (FAB) */}
                         {!isSelectingLocation && (
                             <div style={{ position: 'absolute', bottom: 'calc(25vh + 30px)', right: '16px', zIndex: 1000 }}>
