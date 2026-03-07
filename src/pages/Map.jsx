@@ -127,6 +127,31 @@ const LocationMarker = ({ isPostMode, onMapClick }) => {
     );
 };
 
+// ユーティリティ: 相対時間のフォーマット（〇時間前、昨日など）
+const getRelativeTime = (timestamp) => {
+    if (!timestamp) return '日付不明';
+
+    const now = new Date();
+    const postDate = new Date(timestamp);
+    const diffMs = now - postDate;
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMins < 60) {
+        return diffMins <= 1 ? 'たった今' : `${diffMins}分前`;
+    } else if (diffHours < 24) {
+        return `${diffHours}時間前`;
+    } else if (diffDays === 1) {
+        return '昨日';
+    } else if (diffDays < 7) {
+        return `${diffDays}日前`;
+    } else {
+        // 1週間以上前は日付
+        return `${postDate.getFullYear()}/${String(postDate.getMonth() + 1).padStart(2, '0')}/${String(postDate.getDate()).padStart(2, '0')}`;
+    }
+};
+
 const MapPage = () => {
     // User Posts State (now driven by Firestore)
     const [userPosts, setUserPosts] = useState([]);
@@ -1059,17 +1084,34 @@ const MapPage = () => {
                                                 backgroundColor: activePostId === post.id ? '#EFF6FF' : 'var(--color-surface)',
                                                 borderLeft: post.type === 'danger' ? '4px solid #F59E0B' : (post.type === 'shelter' ? '4px solid #8B5CF6' : '4px solid #10B981'),
                                                 transition: 'background-color 0.2s',
-                                                opacity: isOld ? 0.6 : 1
+                                                opacity: isOld ? 0.5 : 1 // 48時間経過アイテムは半透明
                                             }}
                                         >
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                {/* 上段：タイトルと日付 */}
+                                                {/* 上段：タイトルと日付/バッジ */}
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                                    <div style={{ fontWeight: 'bold', color: post.resolved ? '#9CA3AF' : 'inherit', textDecoration: post.resolved ? 'line-through' : 'none', flex: 1, paddingRight: '8px' }}>
+                                                    <div style={{ fontWeight: 'bold', color: post.resolved ? '#9CA3AF' : 'inherit', textDecoration: post.resolved ? 'line-through' : 'none', flex: 1, paddingRight: '12px' }}>
                                                         {post.type === 'danger' ? '⚠️' : (post.type === 'shelter' ? '🎒' : '🐾')} {post.title}
                                                     </div>
-                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-sub)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                                                        {post.date}
+                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-sub)', whiteSpace: 'nowrap', fontWeight: 'bold' }}>
+                                                            {getRelativeTime(post.timestamp)}
+                                                        </div>
+                                                        {isOld && (
+                                                            <div style={{
+                                                                fontSize: '0.65rem',
+                                                                color: '#6B7280',
+                                                                backgroundColor: '#F3F4F6',
+                                                                padding: '2px 6px',
+                                                                borderRadius: '4px',
+                                                                marginTop: '4px',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '2px'
+                                                            }}>
+                                                                🕒 過去の情報
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
 
