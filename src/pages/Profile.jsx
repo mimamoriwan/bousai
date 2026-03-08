@@ -304,8 +304,27 @@ const Profile = () => {
 
     return (
         <div className="profile-page">
-            <h2 style={{ marginBottom: 'var(--spacing-md)' }}>マイ・ペット手帳</h2>
-
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
+                <h2 style={{ margin: 0 }}>マイ・ペット手帳</h2>
+                <button
+                    onClick={() => setIsEditing(true)}
+                    className="btn btn-secondary"
+                    style={{
+                        padding: '6px 16px',
+                        fontSize: '0.9rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        borderRadius: '20px'
+                    }}
+                >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                    編集
+                </button>
+            </div>
             {/* Photo Section */}
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--spacing-lg)' }}>
                 <div style={{ width: '150px', height: '150px', borderRadius: '50%', backgroundColor: '#f0f0f0', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '4px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
@@ -461,9 +480,7 @@ const Profile = () => {
                 >
                     💡 ご意見・不具合の報告
                 </a>
-            </div>            <button onClick={() => setIsEditing(true)} className="btn btn-secondary" style={{ width: '100%' }}>
-                編集する
-            </button>
+            </div>
             <button onClick={logout} className="btn" style={{ width: '100%', marginTop: 'var(--spacing-md)', backgroundColor: '#F3F4F6', color: '#4B5563', border: 'none' }}>
                 ログアウト
             </button>
