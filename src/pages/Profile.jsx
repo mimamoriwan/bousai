@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, storage } from '../firebase';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
+import html2canvas from 'html2canvas';
 
 const Profile = () => {
     const { currentUser, memberNumber, linkWithGoogle, loginWithGoogle, loginAnonymously, logout } = useAuth();
@@ -31,6 +32,8 @@ const Profile = () => {
 
     const [isEditing, setIsEditing] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [isSharing, setIsSharing] = useState(false);
+    const emergencyCardRef = useRef(null);
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -226,7 +229,46 @@ const Profile = () => {
         return `${years}歳${months}ヶ月`;
     };
 
+    const handleShareEmergencyCard = async () => {
+        if (!emergencyCardRef.current) return;
+        setIsSharing(true);
+        try {
+            const canvas = await html2canvas(emergencyCardRef.current, {
+                scale: 2, // High resolution
+                useCORS: true, // Allow cross-origin images (e.g., photoUrl from Firebase Storage)
+                backgroundColor: '#ffffff'
+            });
 
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+
+            // Generate a filename
+            const filename = `emergency_card_${profile.name || 'pet'}.png`;
+
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: 'image/png' })] })) {
+                // Use Web Share API
+                const file = new File([blob], filename, { type: 'image/png' });
+                await navigator.share({
+                    title: 'ペット緊急カード',
+                    text: `${profile.name}の緊急カードです🐾 #ペット防災 #みまもりWAN`,
+                    files: [file]
+                });
+            } else {
+                // Fallback: Download the image
+                const dataUrl = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.download = filename;
+                link.href = dataUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        } catch (error) {
+            console.error('Error sharing emergency card:', error);
+            alert('緊急カードの保存・シェアに失敗しました。');
+        } finally {
+            setIsSharing(false);
+        }
+    };
 
     if (isEditing) {
         return (
@@ -418,7 +460,7 @@ const Profile = () => {
                 </div>
             </div>
 
-            <div className="card emergency-card" style={{ borderLeft: '4px solid var(--color-danger)' }}>
+            <div className="card emergency-card" style={{ borderLeft: '4px solid var(--color-danger)', backgroundColor: '#ffffff' }} ref={emergencyCardRef}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
                     <h3 style={{ margin: 0 }}>緊急カード</h3>
                     <span style={{ fontSize: '0.8rem', color: 'var(--color-danger)', fontWeight: 'bold' }}>EMERGENCY INFO</span>
@@ -471,6 +513,34 @@ const Profile = () => {
                         {profile.notes}
                     </div>
                 )}
+            </div>
+
+            {/* シェアボタン */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '-8px', marginBottom: 'var(--spacing-lg)' }}>
+                <button
+                    onClick={handleShareEmergencyCard}
+                    disabled={isSharing}
+                    className="btn"
+                    style={{
+                        padding: '12px 24px',
+                        fontSize: '1rem',
+                        backgroundColor: '#10B981', // 視認性の高い緑色
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        boxShadow: '0 4px 6px rgba(16, 185, 129, 0.2)',
+                        fontWeight: 'bold',
+                        opacity: isSharing ? 0.7 : 1,
+                        cursor: isSharing ? 'not-allowed' : 'pointer',
+                        width: '100%',
+                        justifyContent: 'center'
+                    }}
+                >
+                    {isSharing ? '処理中...' : '📤 このカードを保存・シェア'}
+                </button>
             </div>
 
             {/* みまもり活動実績 */}
