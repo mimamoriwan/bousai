@@ -229,45 +229,61 @@ const Profile = () => {
         return `${years}歳${months}ヶ月`;
     };
 
-    const handleShareEmergencyCard = async () => {
+    const handleShareOmamoriCard = async () => {
         if (!emergencyCardRef.current) return;
         setIsSharing(true);
         try {
             const canvas = await html2canvas(emergencyCardRef.current, {
                 scale: 2, // High resolution
                 useCORS: true, // Allow cross-origin images (e.g., photoUrl from Firebase Storage)
+                allowTaint: true, // Specific fix for Chrome/Safari with external images
                 backgroundColor: '#ffffff'
             });
 
             const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 
             // Generate a filename
-            const filename = `emergency_card_${profile.name || 'pet'}.png`;
+            const filename = `omamori_card_${profile.name || 'pet'}.png`;
+            const file = new File([blob], filename, { type: 'image/png' });
 
-            if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: 'image/png' })] })) {
-                // Use Web Share API
-                const file = new File([blob], filename, { type: 'image/png' });
-                await navigator.share({
-                    title: 'ペット緊急カード',
-                    text: `${profile.name}の緊急カードです🐾 #ペット防災 #みまもりWAN`,
-                    files: [file]
-                });
+            const canShare = navigator.canShare && navigator.canShare({ files: [file] });
+
+            if (navigator.share && canShare) {
+                try {
+                    // Use Web Share API
+                    await navigator.share({
+                        title: 'ペットお守りカード',
+                        text: `${profile.name}のお守りカードです🐾 #ペット防災 #みまもりWAN`,
+                        files: [file]
+                    });
+                } catch (shareError) {
+                    console.error('Error during navigator.share:', shareError);
+                    // Fallback to download if user didn't just cancel the share dialog
+                    if (shareError.name !== 'AbortError') {
+                        downloadImage(canvas.toDataURL('image/png'), filename);
+                        alert('シェア機能に失敗したため、画像を保存しました。');
+                    }
+                }
             } else {
-                // Fallback: Download the image
-                const dataUrl = canvas.toDataURL('image/png');
-                const link = document.createElement('a');
-                link.download = filename;
-                link.href = dataUrl;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                // Fallback: Download the image directly if Share API not supported
+                downloadImage(canvas.toDataURL('image/png'), filename);
+                alert('シェア機能がサポートされていないため、画像を保存しました。');
             }
         } catch (error) {
-            console.error('Error sharing emergency card:', error);
-            alert('緊急カードの保存・シェアに失敗しました。');
+            console.error('Error sharing omamori card:', error);
+            alert('お守りカードの保存・シェアに失敗しました。');
         } finally {
             setIsSharing(false);
         }
+    };
+
+    const downloadImage = (dataUrl, filename) => {
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     if (isEditing) {
@@ -420,7 +436,7 @@ const Profile = () => {
                 <button
                     onClick={async () => {
                         if (currentUser?.isAnonymous) {
-                            if (window.confirm("愛犬のプロフィールや緊急カードを作成するには、Googleアカウントでの本登録が必要です🐾\n\nGoogleで連携して本登録に進みますか？")) {
+                            if (window.confirm("愛犬のプロフィールやお守りカードを作成するには、Googleアカウントでの本登録が必要です🐾\n\nGoogleで連携して本登録に進みますか？")) {
                                 try {
                                     await linkWithGoogle();
                                 } catch (error) {
@@ -462,8 +478,8 @@ const Profile = () => {
 
             <div className="card emergency-card" style={{ borderLeft: '4px solid var(--color-danger)', backgroundColor: '#ffffff' }} ref={emergencyCardRef}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-                    <h3 style={{ margin: 0 }}>緊急カード</h3>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--color-danger)', fontWeight: 'bold' }}>EMERGENCY INFO</span>
+                    <h3 style={{ margin: 0 }}>お守りカード</h3>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-danger)', fontWeight: 'bold' }}>OMAMORI INFO</span>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
@@ -518,7 +534,7 @@ const Profile = () => {
             {/* シェアボタン */}
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: '-8px', marginBottom: 'var(--spacing-lg)' }}>
                 <button
-                    onClick={handleShareEmergencyCard}
+                    onClick={handleShareOmamoriCard}
                     disabled={isSharing}
                     className="btn"
                     style={{
