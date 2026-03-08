@@ -24,6 +24,15 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const loginAnonymously = async () => {
+        try {
+            await signInAnonymously(auth);
+        } catch (error) {
+            console.error('Error signing in anonymously:', error);
+            throw error;
+        }
+    };
+
     const linkWithGoogle = async () => {
         try {
             if (currentUser && currentUser.isAnonymous) {
@@ -103,21 +112,10 @@ export const AuthProvider = ({ children }) => {
 
                 setLoading(false);
             } else {
-                // If no user is logged in, automatically sign in anonymously
-                if (!hasInitialized.current) {
-                    hasInitialized.current = true;
-                    try {
-                        await signInAnonymously(auth);
-                        // The onAuthStateChanged listener will fire again with the new anon user
-                    } catch (error) {
-                        console.error('Anonymous auth failed:', error);
-                        setLoading(false);
-                    }
-                } else {
-                    setCurrentUser(null);
-                    setMemberNumber(null);
-                    setLoading(false);
-                }
+                // User is fully logged out (not even anonymous)
+                setCurrentUser(null);
+                setMemberNumber(null);
+                setLoading(false);
             }
         });
 
@@ -128,6 +126,7 @@ export const AuthProvider = ({ children }) => {
         currentUser,
         memberNumber,
         loginWithGoogle,
+        loginAnonymously,
         linkWithGoogle,
         logout
     };
