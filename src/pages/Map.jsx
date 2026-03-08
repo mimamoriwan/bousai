@@ -160,6 +160,7 @@ const MapPage = () => {
 
     const [isSelectingLocation, setIsSelectingLocation] = useState(false);
     const [isWalking, setIsWalking] = useState(false);
+    const [localWalkStartTime, setLocalWalkStartTime] = useState(null); // Keep track locally for auto-clear
     const [showPostOptions, setShowPostOptions] = useState(false);
     const [tempPost, setTempPost] = useState(null); // { lat, lng }
     const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null });
@@ -268,10 +269,23 @@ const MapPage = () => {
         const walkersQuery = query(collection(db, 'users'));
         const unsubscribeWalkers = onSnapshot(walkersQuery, (querySnapshot) => {
             const walkers = [];
+            const now = Date.now();
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
                 if (data.isWalking === true) {
-                    walkers.push({ id: doc.id, ...data });
+                    // Check if walkStartTime exists and is within 30 minutes
+                    let isExpired = false;
+                    if (data.walkStartTime) {
+                        // walkStartTime can be a Firestore Timestamp object
+                        const startTimeMs = data.walkStartTime.toMillis ? data.walkStartTime.toMillis() : data.walkStartTime;
+                        if (now - startTimeMs >= 30 * 60 * 1000) {
+                            isExpired = true;
+                        }
+                    }
+
+                    if (!isExpired) {
+                        walkers.push({ id: doc.id, ...data });
+                    }
                 }
             });
             setActiveWalkers(walkers);
@@ -284,6 +298,31 @@ const MapPage = () => {
             unsubscribeWalkers();
         };
     }, []);
+
+    // 🐾 Auto-clear current user's local walk status after 30 minutes
+    useEffect(() => {
+        let interval;
+        if (isWalking && localWalkStartTime && currentUser) {
+            interval = setInterval(async () => {
+                if (Date.now() - localWalkStartTime >= 30 * 60 * 1000) {
+                    try {
+                        console.log("30 minutes elapsed. Auto-clearing walk status...");
+                        await setDoc(doc(db, 'users', currentUser.uid), {
+                            isWalking: false,
+                            walkStartTime: null
+                        }, { merge: true });
+                        setIsWalking(false);
+                        setLocalWalkStartTime(null);
+                    } catch (error) {
+                        console.error("Error auto-ending walk:", error);
+                    }
+                }
+            }, 60000); // Check every minute
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [isWalking, localWalkStartTime, currentUser]);
 
     const handleMapClick = (latlng) => {
         setTempPost(latlng);
@@ -300,6 +339,7 @@ const MapPage = () => {
                         walkStartTime: null
                     }, { merge: true });
                     setIsWalking(false);
+                    setLocalWalkStartTime(null);
                     alert("お散歩を終了しました。お疲れ様でした！");
                 } catch (error) {
                     console.error("Error ending walk:", error);
@@ -314,6 +354,7 @@ const MapPage = () => {
                         walkStartTime: serverTimestamp()
                     }, { merge: true });
                     setIsWalking(true);
+                    setLocalWalkStartTime(Date.now()); // Set locally for interval check
                     alert("お散歩に出発しました！🐾\n（ご近所のマップに30分間表示されます）");
                 } catch (error) {
                     console.error("Error starting walk:", error);
