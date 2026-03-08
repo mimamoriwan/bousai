@@ -165,6 +165,7 @@ const MapPage = () => {
     const [userPosts, setUserPosts] = useState([]);
     const [activeWalkers, setActiveWalkers] = useState([]); // Array of active walking users
     const [filter, setFilter] = useState('all');
+    const [activeMapLayer, setActiveMapLayer] = useState('public');
     const [showArchived, setShowArchived] = useState(false); // Toggle for old posts
 
     const [isSelectingLocation, setIsSelectingLocation] = useState(false);
@@ -172,7 +173,7 @@ const MapPage = () => {
     const [localWalkStartTime, setLocalWalkStartTime] = useState(null); // Keep track locally for auto-clear
     const [showPostOptions, setShowPostOptions] = useState(false);
     const [tempPost, setTempPost] = useState(null); // { lat, lng }
-    const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null });
+    const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null, visibility: 'public' });
     const [isProcessingImage, setIsProcessingImage] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false); // For Firebase Submit Loading state
     const { currentUser, memberNumber } = useAuth();
@@ -246,7 +247,13 @@ const MapPage = () => {
             const pins = [];
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                pins.push({ id: doc.id, ...data });
+                pins.push({
+                    id: doc.id,
+                    ...data,
+                    visibility: data.visibility || 'public',
+                    savedBy: Array.isArray(data.savedBy) ? data.savedBy : [],
+                    thanks: Array.isArray(data.thanks) ? data.thanks : []
+                });
             });
             setUserPosts(pins);
         } catch (error) {
@@ -265,7 +272,13 @@ const MapPage = () => {
             const pins = [];
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                pins.push({ id: doc.id, ...data });
+                pins.push({
+                    id: doc.id,
+                    ...data,
+                    visibility: data.visibility || 'public',
+                    savedBy: Array.isArray(data.savedBy) ? data.savedBy : [],
+                    thanks: Array.isArray(data.thanks) ? data.thanks : []
+                });
             });
             setUserPosts(pins);
         }, (error) => {
@@ -427,6 +440,8 @@ const MapPage = () => {
                 imagePath: imagePath,
                 resolved: false,
                 thanks: [], // Array of device IDs
+                savedBy: [], // Array of user UIDs who saved this post
+                visibility: postForm.visibility || 'public',
                 uid: currentUser ? currentUser.uid : null, // Record UID to track posts
                 memberNumber: currentUser && !currentUser.isAnonymous && memberNumber ? memberNumber : null
             };
@@ -436,7 +451,7 @@ const MapPage = () => {
             // 3. Reset UI state on success
             setTempPost(null);
             setIsSelectingLocation(false);
-            setPostForm({ type: 'danger', title: '', note: '', image: null });
+            setPostForm({ type: 'danger', title: '', note: '', image: null, visibility: 'public' });
             setIsProcessingImage(false);
 
         } catch (error) {
@@ -485,6 +500,31 @@ const MapPage = () => {
         }
     };
 
+    const handleSavePost = async (postId, currentSavedBy) => {
+        if (!currentUser) {
+            alert("「マイマップに保存」機能を利用するには、ログインが必要です。");
+            return;
+        }
+        if (currentUser.isAnonymous) {
+            alert("自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）");
+            return;
+        }
+
+        const postRef = doc(db, 'map_pins', postId);
+        const savedByArray = currentSavedBy || [];
+        const hasSaved = savedByArray.includes(currentUser.uid);
+
+        try {
+            if (hasSaved) {
+                await updateDoc(postRef, { savedBy: arrayRemove(currentUser.uid) });
+            } else {
+                await updateDoc(postRef, { savedBy: arrayUnion(currentUser.uid) });
+            }
+        } catch (error) {
+            console.error("Error toggling save post: ", error);
+        }
+    };
+
     const handleResolve = async (postId) => {
         if (!requireAuth('「👍 解決済」の報告')) return;
         if (window.confirm('このスポットの状況は「解決済み（安全）」になりましたか？\n※マップ上の表示がグレーに変わります。')) {
@@ -525,22 +565,49 @@ const MapPage = () => {
         }
     };
 
-    const filteredPosts = userPosts.filter(post => {
+    const displayPosts = userPosts.filter(post => {
         // Exclude shelter posts completely unless explicitly filtering for it
         if (post.type === 'shelter' && filter !== 'shelter') return false;
 
-        if (filter === 'all') return !post.resolved; // show everything else that is unresolved
-        if (filter === 'resolved') return post.resolved; // show only resolved posts
-        if (post.resolved) return false; // Hide resolved from other specific filters
-        if (filter === 'walk') return post.type === 'walk' || post.type === 'useful';
-        return post.type === filter;
-    });
+        if (activeMapLayer === 'myMap') {
+            // MY MAP LOGIC
+            if (!currentUser) return false;
 
-    // Apply the archived toggle filter (hide >48h by default)
-    const displayPosts = filteredPosts.filter(post => {
-        const isOld = post.timestamp ? (Date.now() - post.timestamp > 48 * 60 * 60 * 1000) : false;
-        if (showArchived) return true;
-        return !isOld;
+            const isMine = post.uid === currentUser.uid;
+            const isSaved = post.savedBy?.includes(currentUser.uid);
+
+            if (!isMine && !isSaved) return false;
+
+            // Type filtering for My Map
+            if (filter !== 'all' && filter !== 'resolved') {
+                if (filter === 'walk') {
+                    if (post.type !== 'walk' && post.type !== 'useful') return false;
+                } else {
+                    if (post.type !== filter) return false;
+                }
+            }
+            if (filter === 'resolved' && !post.resolved) return false;
+            // Show all including resolved in MyMap if 'all' is toggled.
+
+            return true; // No 48h restriction!
+        } else {
+            // PUBLIC MAP LOGIC
+            if (post.visibility === 'private') return false;
+
+            // Type filtering
+            if (filter === 'all' && post.resolved) return false;
+            if (filter === 'resolved' && !post.resolved) return false;
+            if (filter !== 'all' && filter !== 'resolved' && post.resolved) return false;
+
+            if (filter === 'walk' && post.type !== 'walk' && post.type !== 'useful') return false;
+            if (filter !== 'all' && filter !== 'resolved' && filter !== 'walk' && post.type !== filter) return false;
+
+            // 48h restriction
+            const isOld = post.timestamp ? (Date.now() - post.timestamp > 48 * 60 * 60 * 1000) : false;
+            if (!showArchived && isOld) return false;
+
+            return true;
+        }
     });
 
     return (
@@ -576,32 +643,94 @@ const MapPage = () => {
                     </div>
                 ) : (
                     <>
-                        {/* Action Menu (FAB) */}
+                        {/* Action Menu (FAB) & Top Overlays */}
                         {!isSelectingLocation && (
                             <>
-                                {/* Floating Toggle for Archived Posts */}
-                                <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 1000 }}>
+                                {/* Map Layer Tabs */}
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '16px',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    zIndex: 1000,
+                                    display: 'flex',
+                                    backgroundColor: '#E5E7EB',
+                                    borderRadius: '9999px',
+                                    padding: '4px',
+                                    boxShadow: 'var(--shadow-md)',
+                                    width: '280px'
+                                }}>
                                     <button
-                                        onClick={() => setShowArchived(!showArchived)}
+                                        onClick={() => setActiveMapLayer('public')}
                                         style={{
-                                            backgroundColor: showArchived ? 'var(--color-primary)' : 'white',
-                                            color: showArchived ? 'white' : 'var(--color-text-sub)',
-                                            border: 'none',
-                                            borderRadius: '24px',
+                                            flex: 1,
                                             padding: '8px 16px',
+                                            borderRadius: '9999px',
+                                            border: 'none',
+                                            backgroundColor: activeMapLayer === 'public' ? '#FFFFFF' : 'transparent',
+                                            color: activeMapLayer === 'public' ? 'var(--color-primary)' : '#6B7280',
+                                            fontWeight: activeMapLayer === 'public' ? 'bold' : '600',
                                             fontSize: '0.85rem',
-                                            fontWeight: 'bold',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '6px',
-                                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                                             cursor: 'pointer',
-                                            transition: 'all 0.2s ease',
+                                            transition: 'all 0.3s ease',
+                                            boxShadow: activeMapLayer === 'public' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
                                         }}
                                     >
-                                        🕒 過去情報: {showArchived ? 'ON' : 'OFF'}
+                                        🌍 みんなのマップ
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (!currentUser || currentUser.isAnonymous) {
+                                                alert("自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）");
+                                                return;
+                                            }
+                                            setActiveMapLayer('myMap');
+                                        }}
+                                        style={{
+                                            flex: 1,
+                                            padding: '8px 16px',
+                                            borderRadius: '9999px',
+                                            border: 'none',
+                                            backgroundColor: activeMapLayer === 'myMap' ? '#FFFFFF' : 'transparent',
+                                            color: activeMapLayer === 'myMap' ? 'var(--color-primary)' : '#6B7280',
+                                            fontWeight: activeMapLayer === 'myMap' ? 'bold' : '600',
+                                            fontSize: '0.85rem',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.3s ease',
+                                            boxShadow: activeMapLayer === 'myMap' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
+                                        }}
+                                    >
+                                        🗺️ マイマップ
                                     </button>
                                 </div>
+
+                                {/* Floating Toggle for Archived Posts */}
+                                {activeMapLayer === 'public' && (
+                                    <div style={{ position: 'absolute', top: '64px', right: '16px', zIndex: 1000 }}>
+                                        <button
+                                            onClick={() => setShowArchived(!showArchived)}
+                                            style={{
+                                                backgroundColor: showArchived ? 'var(--color-primary)' : 'white',
+                                                color: showArchived ? 'white' : 'var(--color-text-sub)',
+                                                border: 'none',
+                                                borderRadius: '24px',
+                                                padding: '8px 16px',
+                                                fontSize: '0.85rem',
+                                                fontWeight: 'bold',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s ease',
+                                            }}
+                                        >
+                                            🕒 過去情報: {showArchived ? 'ON' : 'OFF'}
+                                        </button>
+                                    </div>
+                                )}
 
                                 <div style={{ position: 'absolute', bottom: 'calc(25vh + 30px)', right: '16px', zIndex: 1000 }}>
                                     <button
@@ -854,6 +983,63 @@ const MapPage = () => {
                                             </div>
                                         </div>
                                         <div style={{ marginBottom: '10px' }}>
+                                            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>公開範囲</label>
+                                            <div style={{ display: 'flex', gap: '12px' }}>
+                                                {/* Public Card */}
+                                                <div
+                                                    onClick={() => setPostForm({ ...postForm, visibility: 'public' })}
+                                                    style={{
+                                                        flex: 1,
+                                                        padding: '12px 8px',
+                                                        borderRadius: '12px',
+                                                        border: postForm.visibility === 'public' ? '2px solid var(--color-primary)' : '2px solid #E5E7EB',
+                                                        backgroundColor: postForm.visibility === 'public' ? '#FFF7ED' : '#F9FAFB',
+                                                        cursor: 'pointer',
+                                                        textAlign: 'center',
+                                                        transition: 'all 0.2s ease',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        alignItems: 'center',
+                                                        gap: '4px'
+                                                    }}
+                                                >
+                                                    <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🌍</div>
+                                                    <div style={{ fontWeight: postForm.visibility === 'public' ? 'bold' : 'normal', color: postForm.visibility === 'public' ? 'var(--color-primary)' : '#4B5563', fontSize: '0.9rem' }}>みんなに公開</div>
+                                                    <div style={{ fontSize: '0.7rem', color: '#6B7280' }}>48時間で消えます</div>
+                                                </div>
+
+                                                {/* Private Card */}
+                                                <div
+                                                    onClick={() => {
+                                                        if (currentUser && currentUser.isAnonymous) {
+                                                            alert("自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）");
+                                                            return;
+                                                        }
+                                                        setPostForm({ ...postForm, visibility: 'private' });
+                                                    }}
+                                                    style={{
+                                                        flex: 1,
+                                                        padding: '12px 8px',
+                                                        borderRadius: '12px',
+                                                        border: postForm.visibility === 'private' ? '2px solid var(--color-primary)' : '2px solid #E5E7EB',
+                                                        backgroundColor: postForm.visibility === 'private' ? '#FFF7ED' : '#F9FAFB',
+                                                        cursor: 'pointer',
+                                                        textAlign: 'center',
+                                                        transition: 'all 0.2s ease',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        opacity: (currentUser && currentUser.isAnonymous) ? 0.6 : 1
+                                                    }}
+                                                >
+                                                    <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🔒</div>
+                                                    <div style={{ fontWeight: postForm.visibility === 'private' ? 'bold' : 'normal', color: postForm.visibility === 'private' ? 'var(--color-primary)' : '#4B5563', fontSize: '0.9rem' }}>自分だけ</div>
+                                                    <div style={{ fontSize: '0.7rem', color: '#6B7280' }}>マイマップに残ります</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div style={{ marginBottom: '10px' }}>
                                             <label style={{ display: 'block', fontWeight: 'bold' }}>タイトル</label>
                                             <input
                                                 type="text" className="input-field" required
@@ -933,7 +1119,7 @@ const MapPage = () => {
                             <LocationMarker />
 
                             {/* Official Shelters */}
-                            {shelters.filter(s => filter === 'shelter').map(shelter => (
+                            {shelters.filter(() => filter === 'shelter').map(shelter => (
                                 <Marker key={shelter.id} position={[shelter.lat, shelter.lng]}>
                                     <Popup>
                                         <strong>{shelter.name}</strong><br />
@@ -1039,6 +1225,23 @@ const MapPage = () => {
                                                         }}
                                                     >
                                                         👍 解決済に
+                                                    </button>
+                                                )}
+                                                {/* My Map Save Button */}
+                                                {(post.uid !== currentUser?.uid) && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleSavePost(post.id, post.savedBy);
+                                                        }}
+                                                        style={{
+                                                            background: post.savedBy?.includes(currentUser?.uid) ? '#FEF3C7' : '#F3F4F6',
+                                                            border: post.savedBy?.includes(currentUser?.uid) ? '1px solid #FCD34D' : '1px solid #E5E7EB',
+                                                            color: post.savedBy?.includes(currentUser?.uid) ? '#D97706' : '#4B5563',
+                                                            padding: '4px 8px', borderRadius: '16px', cursor: 'pointer', fontSize: '0.85rem', flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '4px'
+                                                        }}
+                                                    >
+                                                        {post.savedBy?.includes(currentUser?.uid) ? '🌟 保存済' : '⭐️ 保存'}
                                                     </button>
                                                 )}
                                             </div>
@@ -1225,32 +1428,57 @@ const MapPage = () => {
                                                     {post.note || '詳細なし'}
                                                 </div>
 
-                                                {/* 下段：写真アイコンとハートボタン */}
+                                                {/* 下段：写真アイコンとハートボタンなど */}
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
                                                     <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)' }}>
                                                         {post.imageUrl && <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>📷 写真あり</span>}
                                                     </div>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleThanks(post.id, post.thanks);
-                                                        }}
-                                                        style={{
-                                                            background: hasThanked ? '#FDF2F8' : 'transparent',
-                                                            border: hasThanked ? '1px solid #FBCFE8' : '1px solid #E5E7EB',
-                                                            color: hasThanked ? '#DB2777' : '#4B5563',
-                                                            padding: '4px 12px', /* 少し押しやすく広げる */
-                                                            borderRadius: '16px',
-                                                            cursor: 'pointer',
-                                                            fontSize: '0.85rem',
-                                                            display: 'flex',
-                                                            justifyContent: 'center',
-                                                            alignItems: 'center',
-                                                            gap: '4px'
-                                                        }}
-                                                    >
-                                                        💖 {post.thanks?.length || 0}
-                                                    </button>
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        {(post.uid !== currentUser?.uid) && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleSavePost(post.id, post.savedBy);
+                                                                }}
+                                                                style={{
+                                                                    background: post.savedBy?.includes(currentUser?.uid) ? '#FEF3C7' : 'transparent',
+                                                                    border: post.savedBy?.includes(currentUser?.uid) ? '1px solid #FCD34D' : '1px solid #E5E7EB',
+                                                                    color: post.savedBy?.includes(currentUser?.uid) ? '#D97706' : '#4B5563',
+                                                                    padding: '4px 12px',
+                                                                    borderRadius: '16px',
+                                                                    cursor: 'pointer',
+                                                                    fontSize: '0.85rem',
+                                                                    display: 'flex',
+                                                                    justifyContent: 'center',
+                                                                    alignItems: 'center',
+                                                                    gap: '4px'
+                                                                }}
+                                                            >
+                                                                {post.savedBy?.includes(currentUser?.uid) ? '🌟 保存済' : '⭐️ 保存'}
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleThanks(post.id, post.thanks);
+                                                            }}
+                                                            style={{
+                                                                background: hasThanked ? '#FDF2F8' : 'transparent',
+                                                                border: hasThanked ? '1px solid #FBCFE8' : '1px solid #E5E7EB',
+                                                                color: hasThanked ? '#DB2777' : '#4B5563',
+                                                                padding: '4px 12px', /* 少し押しやすく広げる */
+                                                                borderRadius: '16px',
+                                                                cursor: 'pointer',
+                                                                fontSize: '0.85rem',
+                                                                display: 'flex',
+                                                                justifyContent: 'center',
+                                                                alignItems: 'center',
+                                                                gap: '4px'
+                                                            }}
+                                                        >
+                                                            💖 {post.thanks?.length || 0}
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
