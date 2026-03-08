@@ -377,6 +377,18 @@ const MapPage = () => {
         e.preventDefault();
         if (!tempPost) return;
 
+        // --- Anonymous User Rate Limiting (Max 3 posts per day) ---
+        if (currentUser && currentUser.isAnonymous) {
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const todayPostsCount = userPosts.filter(p => p.uid === currentUser.uid && p.timestamp >= startOfToday.getTime()).length;
+
+            if (todayPostsCount >= 3) {
+                alert("お試しモードでの投稿は1日3回までです。\n制限を解除するにはマイページからGoogleで本登録を行ってください。");
+                return;
+            }
+        }
+
         setIsSubmitting(true);
 
         try {
@@ -415,6 +427,7 @@ const MapPage = () => {
                 imagePath: imagePath,
                 resolved: false,
                 thanks: [], // Array of device IDs
+                uid: currentUser ? currentUser.uid : null, // Record UID to track posts
                 memberNumber: currentUser && !currentUser.isAnonymous && memberNumber ? memberNumber : null
             };
 
