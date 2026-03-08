@@ -165,6 +165,7 @@ const MapPage = () => {
     const [userPosts, setUserPosts] = useState([]);
     const [activeWalkers, setActiveWalkers] = useState([]); // Array of active walking users
     const [filter, setFilter] = useState('all');
+    const [showArchived, setShowArchived] = useState(false); // Toggle for old posts
 
     const [isSelectingLocation, setIsSelectingLocation] = useState(false);
     const [isWalking, setIsWalking] = useState(false);
@@ -522,6 +523,13 @@ const MapPage = () => {
         return post.type === filter;
     });
 
+    // Apply the archived toggle filter (hide >48h by default)
+    const displayPosts = filteredPosts.filter(post => {
+        const isOld = post.timestamp ? (Date.now() - post.timestamp > 48 * 60 * 60 * 1000) : false;
+        if (showArchived) return true;
+        return !isOld;
+    });
+
     return (
         <div className="map-page" style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
 
@@ -557,31 +565,57 @@ const MapPage = () => {
                     <>
                         {/* Action Menu (FAB) */}
                         {!isSelectingLocation && (
-                            <div style={{ position: 'absolute', bottom: 'calc(25vh + 30px)', right: '16px', zIndex: 1000 }}>
-                                <button
-                                    onClick={() => {
-                                        if (!requireAuth('アクションメニューを開く')) return;
-                                        setShowPostOptions(true);
-                                    }}
-                                    className={`btn ${isWalking ? 'active-pulse' : ''}`}
-                                    style={{
-                                        backgroundColor: !isWalking ? 'var(--color-primary)' : undefined, // Inherit CSS when active
-                                        color: 'white',
-                                        width: '60px',
-                                        height: '60px',
-                                        borderRadius: '50%',
-                                        boxShadow: isWalking ? 'none' : '0 4px 10px rgba(0,0,0,0.3)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        fontSize: '1.8rem',
-                                        transition: 'background-color 0.3s, transform 0.2s',
-                                        padding: 0
-                                    }}
-                                >
-                                    🐾
-                                </button>
-                            </div>
+                            <>
+                                {/* Floating Toggle for Archived Posts */}
+                                <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 1000 }}>
+                                    <button
+                                        onClick={() => setShowArchived(!showArchived)}
+                                        style={{
+                                            backgroundColor: showArchived ? 'var(--color-primary)' : 'white',
+                                            color: showArchived ? 'white' : 'var(--color-text-sub)',
+                                            border: 'none',
+                                            borderRadius: '24px',
+                                            padding: '8px 16px',
+                                            fontSize: '0.85rem',
+                                            fontWeight: 'bold',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s ease',
+                                        }}
+                                    >
+                                        🕒 過去情報: {showArchived ? 'ON' : 'OFF'}
+                                    </button>
+                                </div>
+
+                                <div style={{ position: 'absolute', bottom: 'calc(25vh + 30px)', right: '16px', zIndex: 1000 }}>
+                                    <button
+                                        onClick={() => {
+                                            if (!requireAuth('アクションメニューを開く')) return;
+                                            setShowPostOptions(true);
+                                        }}
+                                        className={`btn ${isWalking ? 'active-pulse' : ''}`}
+                                        style={{
+                                            backgroundColor: !isWalking ? 'var(--color-primary)' : undefined, // Inherit CSS when active
+                                            color: 'white',
+                                            width: '60px',
+                                            height: '60px',
+                                            borderRadius: '50%',
+                                            boxShadow: isWalking ? 'none' : '0 4px 10px rgba(0,0,0,0.3)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '1.8rem',
+                                            transition: 'background-color 0.3s, transform 0.2s',
+                                            padding: 0
+                                        }}
+                                    >
+                                        🐾
+                                    </button>
+                                </div>
+                            </>
                         )}
 
                         {/* Post Options Action Sheet / Modal */}
@@ -908,12 +942,9 @@ const MapPage = () => {
                             ))}
 
                             {/* User Posts */}
-                            {filteredPosts.filter(post => {
-                                // Maps side filter: completely hide pins older than 48 hours for better visibility
-                                const isOld = post.timestamp ? (Date.now() - post.timestamp > 48 * 60 * 60 * 1000) : false;
-                                return !isOld;
-                            }).map(post => {
+                            {displayPosts.map(post => {
                                 const hasThanked = post.thanks?.includes(currentUser?.uid);
+                                const isOld = post.timestamp ? (Date.now() - post.timestamp > 48 * 60 * 60 * 1000) : false;
                                 let markerIcon = post.resolved ? resolvedIcon :
                                     (post.type === 'danger' ? dangerIcon :
                                         (post.type === 'shelter' ? shelterIcon :
@@ -924,6 +955,7 @@ const MapPage = () => {
                                         key={post.id}
                                         position={[post.lat, post.lng]}
                                         icon={markerIcon}
+                                        opacity={isOld ? 0.5 : 1}
                                         ref={(ref) => {
                                             if (ref) {
                                                 markerRefs.current.set(post.id, ref);
@@ -1126,9 +1158,9 @@ const MapPage = () => {
             >
                 <div style={{ padding: '0 var(--spacing-md)', paddingBottom: '120px' }}>
                     <PullToRefresh onRefresh={handleRefresh} pullingContent="" refreshingContent={<div style={{ textAlign: 'center', padding: '10px', color: 'var(--color-text-sub)' }}>更新中...</div>}>
-                        {filteredPosts.length > 0 ? (
+                        {displayPosts.length > 0 ? (
                             <div style={{ display: 'grid', gap: 'var(--spacing-sm)' }}>
-                                {[...filteredPosts].sort((a, b) => b.timestamp - a.timestamp).map(post => {
+                                {[...displayPosts].sort((a, b) => b.timestamp - a.timestamp).map(post => {
                                     const hasThanked = post.thanks?.includes(currentUser?.uid);
                                     const isOld = post.timestamp ? (Date.now() - post.timestamp > 48 * 60 * 60 * 1000) : false;
                                     return (
