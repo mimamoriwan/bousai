@@ -50,6 +50,10 @@ const GuidePage = () => {
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <li style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
                         <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginBottom: '4px' }}>2026/03/08</div>
+                        <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>登録不要でサクッとアプリを体験できる「見習い隊員（お試し）モード」が登場しました！マップの過去情報（48時間以上前）を切り替え表示できるスイッチを追加し、投稿ジャンルに「街の発見・その他」が仲間入りしました🐾</div>
+                    </li>
+                    <li style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginBottom: '4px' }}>2026/03/08</div>
                         <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>LINE公式アカウントのメニュー「使い方・ヘルプ」がパワーアップしました！🐶 タップすると、可愛いイラスト付きで操作方法が確認できるリッチなガイドカードが届くようになりました📖✨</div>
                     </li>
                     <li style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
