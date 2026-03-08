@@ -49,7 +49,25 @@ const Profile = () => {
                         setProfile(JSON.parse(savedProfile));
                         setIsEditing(false);
                     } else {
-                        setIsEditing(true);
+                        if (currentUser.isAnonymous) {
+                            // Default profile for apprentices
+                            setProfile({
+                                name: '見習い隊員',
+                                species: 'other',
+                                size: '',
+                                breed: '未登録',
+                                birthdate: '',
+                                gender: 'male',
+                                owner: '未登録',
+                                phone: '未登録',
+                                vet: '未登録',
+                                notes: '※このプロフィールは仮のものです。「編集」ボタンからGoogle連携を行うと、自分のペットの詳しい情報を登録・保存できるようになります。',
+                                photoUrl: ''
+                            });
+                            setIsEditing(false);
+                        } else {
+                            setIsEditing(true);
+                        }
                     }
                 }
             }
@@ -358,7 +376,20 @@ const Profile = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
                 <h2 style={{ margin: 0 }}>マイ・ペット手帳</h2>
                 <button
-                    onClick={() => setIsEditing(true)}
+                    onClick={async () => {
+                        if (currentUser?.isAnonymous) {
+                            if (window.confirm("愛犬のプロフィールや緊急カードを作成するには、Googleアカウントでの本登録が必要です🐾\n\nGoogleで連携して本登録に進みますか？")) {
+                                try {
+                                    await linkWithGoogle();
+                                } catch (error) {
+                                    console.error('Auth error:', error);
+                                    alert('Google連携に失敗しました。');
+                                }
+                            }
+                        } else {
+                            setIsEditing(true);
+                        }
+                    }}
                     className="btn btn-secondary"
                     style={{
                         padding: '6px 16px',
