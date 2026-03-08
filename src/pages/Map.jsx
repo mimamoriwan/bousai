@@ -55,6 +55,14 @@ const shelterIcon = L.divIcon({
     iconAnchor: [18, 18]
 });
 
+// Others/Discovery Icon (Blue/Lightbulb)
+const othersIcon = L.divIcon({
+    className: 'others-icon',
+    html: '<div style="background-color: #3B82F6; width: 32px; height: 32px; border-radius: 50%; border: 2px solid white; display:flex; align-items:center; justify-content:center; font-size:18px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">💡</div>',
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+});
+
 // Resolved Spot Icon (Gray)
 const resolvedIcon = L.divIcon({
     className: 'resolved-icon',
@@ -789,6 +797,13 @@ const MapPage = () => {
                                                         onChange={e => setPostForm({ ...postForm, type: e.target.value })}
                                                     /> 🎒 防災・避難所
                                                 </label>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <input
+                                                        type="radio" name="type" value="others"
+                                                        checked={postForm.type === 'others'}
+                                                        onChange={e => setPostForm({ ...postForm, type: e.target.value })}
+                                                    /> 💡 街の発見・その他
+                                                </label>
                                             </div>
                                         </div>
                                         <div style={{ marginBottom: '10px' }}>
@@ -893,19 +908,22 @@ const MapPage = () => {
                             ))}
 
                             {/* User Posts */}
-                            {filteredPosts.map(post => {
-                                const hasThanked = post.thanks?.includes(currentUser?.uid);
+                            {filteredPosts.filter(post => {
+                                // Maps side filter: completely hide pins older than 48 hours for better visibility
                                 const isOld = post.timestamp ? (Date.now() - post.timestamp > 48 * 60 * 60 * 1000) : false;
+                                return !isOld;
+                            }).map(post => {
+                                const hasThanked = post.thanks?.includes(currentUser?.uid);
                                 let markerIcon = post.resolved ? resolvedIcon :
                                     (post.type === 'danger' ? dangerIcon :
-                                        (post.type === 'shelter' ? shelterIcon : walkIcon));
+                                        (post.type === 'shelter' ? shelterIcon :
+                                            (post.type === 'others' ? othersIcon : walkIcon)));
 
                                 return (
                                     <Marker
                                         key={post.id}
                                         position={[post.lat, post.lng]}
                                         icon={markerIcon}
-                                        opacity={isOld ? 0.5 : 1}
                                         ref={(ref) => {
                                             if (ref) {
                                                 markerRefs.current.set(post.id, ref);
@@ -1100,6 +1118,7 @@ const MapPage = () => {
                             <button className={`filter-chip ${filter === 'danger' ? 'active' : ''}`} onClick={() => setFilter('danger')}>危険・スポット</button>
                             <button className={`filter-chip ${filter === 'walk' ? 'active' : ''}`} onClick={() => setFilter('walk')}>お散歩情報</button>
                             <button className={`filter-chip ${filter === 'shelter' ? 'active' : ''}`} onClick={() => setFilter('shelter')}>防災情報</button>
+                            <button className={`filter-chip ${filter === 'others' ? 'active' : ''}`} onClick={() => setFilter('others')}>発見等</button>
                         </div>
                     </div>
                 }
@@ -1123,7 +1142,7 @@ const MapPage = () => {
                                                 margin: 0,
                                                 cursor: 'pointer',
                                                 backgroundColor: activePostId === post.id ? '#EFF6FF' : 'var(--color-surface)',
-                                                borderLeft: post.type === 'danger' ? '4px solid #F59E0B' : (post.type === 'shelter' ? '4px solid #8B5CF6' : '4px solid #10B981'),
+                                                borderLeft: post.type === 'danger' ? '4px solid #F59E0B' : (post.type === 'shelter' ? '4px solid #8B5CF6' : (post.type === 'others' ? '4px solid #3B82F6' : '4px solid #10B981')),
                                                 transition: 'background-color 0.2s',
                                                 opacity: isOld ? 0.5 : 1 // 48時間経過アイテムは半透明
                                             }}
@@ -1132,7 +1151,7 @@ const MapPage = () => {
                                                 {/* 上段：タイトルと日付/バッジ */}
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                                     <div style={{ fontWeight: 'bold', color: post.resolved ? '#9CA3AF' : 'inherit', textDecoration: post.resolved ? 'line-through' : 'none', flex: 1, paddingRight: '12px' }}>
-                                                        {post.type === 'danger' ? '⚠️' : (post.type === 'shelter' ? '🎒' : '🐾')} {post.title}
+                                                        {post.type === 'danger' ? '⚠️' : (post.type === 'shelter' ? '🎒' : (post.type === 'others' ? '💡' : '🐾'))} {post.title}
                                                     </div>
                                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
                                                         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-sub)', whiteSpace: 'nowrap', fontWeight: 'bold' }}>
