@@ -5,6 +5,7 @@ import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
 import html2canvas from 'html2canvas';
+import toast from 'react-hot-toast';
 
 const Profile = () => {
     const { currentUser, memberNumber, linkWithGoogle, loginWithGoogle, loginAnonymously, logout } = useAuth();
@@ -246,32 +247,34 @@ const Profile = () => {
             const filename = `omamori_card_${profile.name || 'pet'}.png`;
             const file = new File([blob], filename, { type: 'image/png' });
 
-            const canShare = navigator.canShare && navigator.canShare({ files: [file] });
+            const shareData = {
+                files: [file],
+                title: 'お守りカード',
+                text: `${profile.name}のお守りカードです🐾 #ペット防災 #みまもりWAN`
+            };
+
+            const canShare = navigator.canShare && navigator.canShare(shareData);
 
             if (navigator.share && canShare) {
                 try {
                     // Use Web Share API
-                    await navigator.share({
-                        title: 'ペットお守りカード',
-                        text: `${profile.name}のお守りカードです🐾 #ペット防災 #みまもりWAN`,
-                        files: [file]
-                    });
+                    await navigator.share(shareData);
                 } catch (shareError) {
                     console.error('Error during navigator.share:', shareError);
                     // Fallback to download if user didn't just cancel the share dialog
                     if (shareError.name !== 'AbortError') {
                         downloadImage(canvas.toDataURL('image/png'), filename);
-                        alert('シェア機能に失敗したため、画像を保存しました。');
+                        toast.success('ご利用のブラウザ（LINE等）の仕様により、端末に画像を直接ダウンロードしました📥 写真アプリからご確認ください。', { duration: 5000 });
                     }
                 }
             } else {
                 // Fallback: Download the image directly if Share API not supported
                 downloadImage(canvas.toDataURL('image/png'), filename);
-                alert('シェア機能がサポートされていないため、画像を保存しました。');
+                toast.success('ご利用のブラウザ（LINE等）の仕様により、端末に画像を直接ダウンロードしました📥 写真アプリからご確認ください。', { duration: 5000 });
             }
         } catch (error) {
             console.error('Error sharing omamori card:', error);
-            alert('お守りカードの保存・シェアに失敗しました。');
+            toast.error('お守りカードの保存・シェアに失敗しました。');
         } finally {
             setIsSharing(false);
         }

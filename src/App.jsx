@@ -7,11 +7,13 @@ import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import { AuthProvider } from './context/AuthContext';
 import InstallPrompt from './components/InstallPrompt';
+import { Toaster } from 'react-hot-toast';
 import './App.css';
 
 function App() {
   return (
     <AuthProvider>
+      <Toaster position="top-center" />
       <BrowserRouter>
         <InstallPrompt />
         <Routes>
