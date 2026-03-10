@@ -942,159 +942,189 @@ const MapPage = () => {
                         {/* Post Form Modal */}
                         {tempPost && (
                             <div style={{
-                                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                                backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center'
-                            }}>
-                                <div className="card" style={{ width: '90%', maxWidth: '400px', margin: 0 }}>
-                                    <h3>新規スポット登録</h3>
-                                    <form onSubmit={handlePostSubmit}>
-                                        <div style={{ marginBottom: '10px' }}>
-                                            <label style={{ display: 'block', fontWeight: 'bold' }}>種類</label>
-                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                    <input
-                                                        type="radio" name="type" value="danger"
-                                                        checked={postForm.type === 'danger'}
-                                                        onChange={e => setPostForm({ ...postForm, type: e.target.value })}
-                                                    /> ⚠️ 危険・注意
-                                                </label>
-                                                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                    <input
-                                                        type="radio" name="type" value="walk"
-                                                        checked={postForm.type === 'walk'}
-                                                        onChange={e => setPostForm({ ...postForm, type: e.target.value })}
-                                                    /> 🐾 お散歩情報
-                                                </label>
-                                                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                    <input
-                                                        type="radio" name="type" value="shelter"
-                                                        checked={postForm.type === 'shelter'}
-                                                        onChange={e => setPostForm({ ...postForm, type: e.target.value })}
-                                                    /> 🎒 防災・避難所
-                                                </label>
-                                                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                    <input
-                                                        type="radio" name="type" value="others"
-                                                        checked={postForm.type === 'others'}
-                                                        onChange={e => setPostForm({ ...postForm, type: e.target.value })}
-                                                    /> 💡 街の発見・その他
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <div style={{ marginBottom: '10px' }}>
-                                            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>公開範囲</label>
-                                            <div style={{ display: 'flex', gap: '12px' }}>
-                                                {/* Public Card */}
-                                                <div
-                                                    onClick={() => setPostForm({ ...postForm, visibility: 'public' })}
-                                                    style={{
-                                                        flex: 1,
-                                                        padding: '12px 8px',
-                                                        borderRadius: '12px',
-                                                        border: postForm.visibility === 'public' ? '2px solid var(--color-primary)' : '2px solid #E5E7EB',
-                                                        backgroundColor: postForm.visibility === 'public' ? '#FFF7ED' : '#F9FAFB',
-                                                        cursor: 'pointer',
-                                                        textAlign: 'center',
-                                                        transition: 'all 0.2s ease',
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        alignItems: 'center',
-                                                        gap: '4px'
-                                                    }}
-                                                >
-                                                    <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🌍</div>
-                                                    <div style={{ fontWeight: postForm.visibility === 'public' ? 'bold' : 'normal', color: postForm.visibility === 'public' ? 'var(--color-primary)' : '#4B5563', fontSize: '0.9rem' }}>みんなに公開</div>
-                                                    <div style={{ fontSize: '0.7rem', color: '#6B7280' }}>48時間で消えます</div>
+                                position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000,
+                                display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
+                                overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+                                padding: '16px', paddingTop: 'max(16px, env(safe-area-inset-top))', paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
+                                boxSizing: 'border-box'
+                            }}
+                                onTouchMove={(e) => e.stopPropagation()}
+                                onTouchStart={(e) => e.stopPropagation()}
+                                onTouchEnd={(e) => e.stopPropagation()}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onWheel={(e) => e.stopPropagation()}
+                            >
+                                <div className="card" style={{
+                                    width: '100%',
+                                    maxWidth: '400px',
+                                    margin: 0,
+                                    padding: 0,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    maxHeight: 'calc(100dvh - 32px)',
+                                    overflow: 'hidden'
+                                }}
+                                    onTouchMove={(e) => e.stopPropagation()}
+                                    onTouchStart={(e) => e.stopPropagation()}
+                                    onTouchEnd={(e) => e.stopPropagation()}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onWheel={(e) => e.stopPropagation()}
+                                >
+                                    <h3 style={{ padding: '16px 16px 0', margin: 0 }}>新規スポット登録</h3>
+                                    <form onSubmit={handlePostSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
+                                        <div style={{ padding: '16px' }}>
+                                            <div style={{ marginBottom: '10px' }}>
+                                                <label style={{ display: 'block', fontWeight: 'bold' }}>種類</label>
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <input
+                                                            type="radio" name="type" value="danger"
+                                                            checked={postForm.type === 'danger'}
+                                                            onChange={e => setPostForm({ ...postForm, type: e.target.value })}
+                                                        /> ⚠️ 危険・注意
+                                                    </label>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <input
+                                                            type="radio" name="type" value="walk"
+                                                            checked={postForm.type === 'walk'}
+                                                            onChange={e => setPostForm({ ...postForm, type: e.target.value })}
+                                                        /> 🐾 お散歩情報
+                                                    </label>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <input
+                                                            type="radio" name="type" value="shelter"
+                                                            checked={postForm.type === 'shelter'}
+                                                            onChange={e => setPostForm({ ...postForm, type: e.target.value })}
+                                                        /> 🎒 防災・避難所
+                                                    </label>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <input
+                                                            type="radio" name="type" value="others"
+                                                            checked={postForm.type === 'others'}
+                                                            onChange={e => setPostForm({ ...postForm, type: e.target.value })}
+                                                        /> 💡 街の発見・その他
+                                                    </label>
                                                 </div>
+                                            </div>
+                                            <div style={{ marginBottom: '10px' }}>
+                                                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>公開範囲</label>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-                                                {/* Private Card */}
-                                                <div
-                                                    onClick={() => {
-                                                        if (currentUser && currentUser.isAnonymous) {
-                                                            alert("自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）");
-                                                            return;
-                                                        }
-                                                        setPostForm({ ...postForm, visibility: 'private' });
-                                                    }}
-                                                    style={{
-                                                        flex: 1,
-                                                        padding: '12px 8px',
-                                                        borderRadius: '12px',
-                                                        border: postForm.visibility === 'private' ? '2px solid var(--color-primary)' : '2px solid #E5E7EB',
-                                                        backgroundColor: postForm.visibility === 'private' ? '#FFF7ED' : '#F9FAFB',
-                                                        cursor: 'pointer',
-                                                        textAlign: 'center',
-                                                        transition: 'all 0.2s ease',
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                        opacity: (currentUser && currentUser.isAnonymous) ? 0.6 : 1
-                                                    }}
-                                                >
-                                                    <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🔒</div>
-                                                    <div style={{ fontWeight: postForm.visibility === 'private' ? 'bold' : 'normal', color: postForm.visibility === 'private' ? 'var(--color-primary)' : '#4B5563', fontSize: '0.9rem' }}>自分だけ</div>
-                                                    <div style={{ fontSize: '0.7rem', color: '#6B7280' }}>マイマップに残ります</div>
+                                                    {/* 1段目：みんなに公開 */}
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                                        <input
+                                                            type="radio"
+                                                            name="visibility"
+                                                            value="public"
+                                                            checked={postForm.visibility === 'public'}
+                                                            onChange={() => setPostForm({ ...postForm, visibility: 'public' })}
+                                                            style={{ width: '18px', height: '18px', accentColor: 'var(--color-primary)' }}
+                                                        />
+                                                        <span style={{ fontSize: '0.95rem', fontWeight: postForm.visibility === 'public' ? 'bold' : 'normal' }}>
+                                                            🌍 みんなに公開 <span style={{ fontSize: '0.8rem', color: '#6B7280', fontWeight: 'normal' }}>（48時間で消えます）</span>
+                                                        </span>
+                                                    </label>
+
+                                                    {/* 2段目：自分だけ */}
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', opacity: (currentUser && currentUser.isAnonymous) ? 0.6 : 1 }}>
+                                                        <input
+                                                            type="radio"
+                                                            name="visibility"
+                                                            value="private"
+                                                            checked={postForm.visibility === 'private'}
+                                                            onChange={() => {
+                                                                if (currentUser && currentUser.isAnonymous) {
+                                                                    alert("自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）");
+                                                                    return;
+                                                                }
+                                                                setPostForm({ ...postForm, visibility: 'private' });
+                                                            }}
+                                                            style={{ width: '18px', height: '18px', accentColor: 'var(--color-primary)' }}
+                                                        />
+                                                        <span style={{ fontSize: '0.95rem', fontWeight: postForm.visibility === 'private' ? 'bold' : 'normal' }}>
+                                                            🔒 自分だけ <span style={{ fontSize: '0.8rem', color: '#6B7280', fontWeight: 'normal' }}>（マイマップに残ります）</span>
+                                                        </span>
+                                                    </label>
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div style={{ marginBottom: '10px' }}>
-                                            <label style={{ display: 'block', fontWeight: 'bold' }}>タイトル</label>
-                                            <input
-                                                type="text" className="input-field" required
-                                                value={postForm.title}
-                                                onChange={e => setPostForm({ ...postForm, title: e.target.value })}
-                                                placeholder="例：歩道が狭い、水飲み場あり"
-                                            />
-                                        </div>
-                                        <div style={{ marginBottom: '10px' }}>
-                                            <label style={{ display: 'block', fontWeight: 'bold' }}>詳細メモ</label>
-                                            <textarea
-                                                className="input-field" rows="2"
-                                                value={postForm.note}
-                                                onChange={e => setPostForm({ ...postForm, note: e.target.value })}
-                                            ></textarea>
-                                        </div>
-                                        <div style={{ marginBottom: '10px' }}>
-                                            <label style={{ display: 'block', fontWeight: 'bold' }}>写真</label>
-                                            <input
-                                                type="file"
-                                                accept="image/*,.heic,.heif"
-                                                onChange={async (e) => {
-                                                    const file = e.target.files[0];
-                                                    if (file) {
-                                                        setIsProcessingImage(true);
-                                                        try {
-                                                            const { compressImage } = await import('../utils/imageUtils');
-                                                            const compressedDataUrl = await compressImage(file);
-                                                            setPostForm(prev => ({ ...prev, image: compressedDataUrl }));
-                                                        } catch (error) {
-                                                            console.error("Image compression failed", error);
-                                                            alert("画像の処理に失敗しました。");
-                                                        } finally {
-                                                            setIsProcessingImage(false);
+                                            <div style={{ marginBottom: '10px' }}>
+                                                <label style={{ display: 'block', fontWeight: 'bold' }}>タイトル</label>
+                                                <input
+                                                    type="text" className="input-field" required
+                                                    value={postForm.title}
+                                                    onChange={e => setPostForm({ ...postForm, title: e.target.value })}
+                                                    placeholder="例：歩道が狭い、水飲み場あり"
+                                                />
+                                            </div>
+                                            <div style={{ marginBottom: '10px' }}>
+                                                <label style={{ display: 'block', fontWeight: 'bold' }}>詳細メモ</label>
+                                                <textarea
+                                                    className="input-field" rows="2"
+                                                    value={postForm.note}
+                                                    onChange={e => setPostForm({ ...postForm, note: e.target.value })}
+                                                ></textarea>
+                                            </div>
+                                            <div style={{ marginBottom: '10px' }}>
+                                                <label style={{ display: 'block', fontWeight: 'bold' }}>写真</label>
+                                                <input
+                                                    type="file"
+                                                    accept="image/*,.heic,.heif"
+                                                    onChange={async (e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            setIsProcessingImage(true);
+                                                            try {
+                                                                const { compressImage } = await import('../utils/imageUtils');
+                                                                const compressedDataUrl = await compressImage(file);
+                                                                setPostForm(prev => ({ ...prev, image: compressedDataUrl }));
+                                                            } catch (error) {
+                                                                console.error("Image compression failed", error);
+                                                                alert("画像の処理に失敗しました。");
+                                                            } finally {
+                                                                setIsProcessingImage(false);
+                                                            }
+                                                        } else {
+                                                            setPostForm(prev => ({ ...prev, image: null }));
                                                         }
-                                                    } else {
-                                                        setPostForm(prev => ({ ...prev, image: null }));
-                                                    }
-                                                }}
-                                                className="input-field"
-                                                style={{ padding: '8px' }}
-                                                disabled={isProcessingImage}
-                                            />
-                                            {isProcessingImage && (
-                                                <div style={{ marginTop: '10px', color: 'var(--color-primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                                                    処理中... しばらくお待ち下さい (HEIC画像などは数秒かかります)
-                                                </div>
-                                            )}
-                                            {postForm.image && !isProcessingImage && (
-                                                <div style={{ marginTop: '10px' }}>
-                                                    <img src={postForm.image} alt="Preview" style={{ width: '100%', maxHeight: '150px', objectFit: 'contain', borderRadius: '4px' }} />
-                                                </div>
-                                            )}
+                                                    }}
+                                                    className="input-field"
+                                                    style={{ padding: '8px' }}
+                                                    disabled={isProcessingImage}
+                                                />
+                                                {isProcessingImage && (
+                                                    <div style={{ marginTop: '10px', color: 'var(--color-primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                                        処理中... しばらくお待ち下さい (HEIC画像などは数秒かかります)
+                                                    </div>
+                                                )}
+                                                {postForm.image && !isProcessingImage && (
+                                                    <div style={{ marginTop: '10px' }}>
+                                                        <img src={postForm.image} alt="Preview" style={{ width: '100%', maxHeight: '150px', objectFit: 'contain', borderRadius: '4px' }} />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {/* 可愛いイラスト */}
+                                            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'center', width: '100%' }}>
+                                                <img
+                                                    src="/toukou_botom.png"
+                                                    alt="みまもりWANの仲間たち"
+                                                    style={{
+                                                        width: '100%',
+                                                        height: 'auto',
+                                                        borderRadius: '12px',
+                                                        objectFit: 'cover',
+                                                        boxShadow: '0 4px 6px rgba(0,0,0,0.05)'
+                                                    }}
+                                                />
+                                            </div>
                                         </div>
-                                        <div style={{ display: 'flex', gap: '10px' }}>
+                                        {/* ▼▼▼ 下部追従（Sticky）ボタン ▼▼▼ */}
+                                        <div style={{
+                                            position: 'sticky', bottom: '90px', background: '#fff',
+                                            padding: '12px 16px calc(12px + env(safe-area-inset-bottom))',
+                                            display: 'flex', gap: '10px',
+                                            borderTop: '1px solid #eee',
+                                            zIndex: 10 /* 写真の上に確実にボタンを表示する */
+                                        }}>
                                             <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setTempPost(null)} disabled={isSubmitting}>キャンセル</button>
                                             <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={isProcessingImage || isSubmitting}>
                                                 {isSubmitting ? '保存中...' : '登録'}
