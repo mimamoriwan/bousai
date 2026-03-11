@@ -49,6 +49,15 @@ const GuidePage = () => {
             <div className="card" style={{ marginBottom: 'var(--spacing-lg)' }}>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <li style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginBottom: '4px' }}>2026/03/11</div>
+                        <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>
+                            【機能追加】マップに「現在地に戻る（ホーム）」ボタンを追加しました。<br />
+                            【機能追加】文字入力なしでサクッと報告できる「クイック投稿」機能を追加しました（右下のアクションボタンから起動）。<br />
+                            【UI改善】マイページの「不具合・報告」ボタンを、プロフィール下の見つけやすい位置に移動しました。<br />
+                            【システム】セキュリティアップデートおよび動作の安定性向上を行いました。
+                        </div>
+                    </li>
+                    <li style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
                         <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginBottom: '4px' }}>2026/03/08</div>
                         <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>登録不要でサクッとアプリを体験できる「見習い隊員（お試し）モード」が登場しました！マップの過去情報（48時間以上前）を切り替え表示できるスイッチを追加し、投稿ジャンルに「街の発見・その他」が仲間入りしました🐾</div>
                     </li>
