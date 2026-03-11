@@ -738,91 +738,7 @@ const MapPage = () => {
                         {/* Action Menu (FAB) & Top Overlays */}
                         {!isSelectingLocation && (
                             <>
-                                {/* Map Layer Tabs */}
-                                <div style={{
-                                    position: 'absolute',
-                                    top: '16px',
-                                    left: '50%',
-                                    transform: 'translateX(-50%)',
-                                    zIndex: 1000,
-                                    display: 'flex',
-                                    backgroundColor: '#E5E7EB',
-                                    borderRadius: '9999px',
-                                    padding: '4px',
-                                    boxShadow: 'var(--shadow-md)',
-                                    width: '280px'
-                                }}>
-                                    <button
-                                        onClick={() => setActiveMapLayer('public')}
-                                        style={{
-                                            flex: 1,
-                                            padding: '8px 16px',
-                                            borderRadius: '9999px',
-                                            border: 'none',
-                                            backgroundColor: activeMapLayer === 'public' ? '#FFFFFF' : 'transparent',
-                                            color: activeMapLayer === 'public' ? 'var(--color-primary)' : '#6B7280',
-                                            fontWeight: activeMapLayer === 'public' ? 'bold' : '600',
-                                            fontSize: '0.85rem',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.3s ease',
-                                            boxShadow: activeMapLayer === 'public' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
-                                        }}
-                                    >
-                                        🌍 みんなのマップ
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            if (!currentUser || currentUser.isAnonymous) {
-                                                alert("自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）");
-                                                return;
-                                            }
-                                            setActiveMapLayer('myMap');
-                                        }}
-                                        style={{
-                                            flex: 1,
-                                            padding: '8px 16px',
-                                            borderRadius: '9999px',
-                                            border: 'none',
-                                            backgroundColor: activeMapLayer === 'myMap' ? '#FFFFFF' : 'transparent',
-                                            color: activeMapLayer === 'myMap' ? 'var(--color-primary)' : '#6B7280',
-                                            fontWeight: activeMapLayer === 'myMap' ? 'bold' : '600',
-                                            fontSize: '0.85rem',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.3s ease',
-                                            boxShadow: activeMapLayer === 'myMap' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
-                                        }}
-                                    >
-                                        🗺️ マイマップ
-                                    </button>
-                                </div>
 
-                                {/* Floating Toggle for Archived Posts */}
-                                {activeMapLayer === 'public' && (
-                                    <div style={{ position: 'absolute', top: '64px', right: '16px', zIndex: 1000 }}>
-                                        <button
-                                            onClick={() => setShowArchived(!showArchived)}
-                                            style={{
-                                                backgroundColor: showArchived ? 'var(--color-primary)' : 'white',
-                                                color: showArchived ? 'white' : 'var(--color-text-sub)',
-                                                border: 'none',
-                                                borderRadius: '24px',
-                                                padding: '8px 16px',
-                                                fontSize: '0.85rem',
-                                                fontWeight: 'bold',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '6px',
-                                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.2s ease',
-                                            }}
-                                        >
-                                            🕒 過去情報: {showArchived ? 'ON' : 'OFF'}
-                                        </button>
-                                    </div>
-                                )}
 
                                 {/* Go to Current Location FAB */}
                                 <div style={{ position: 'absolute', bottom: 'calc(25vh + 100px)', right: '20px', zIndex: 1000 }}>
@@ -938,6 +854,7 @@ const MapPage = () => {
                                 >
                                     <h3 style={{ textAlign: 'center', marginBottom: '20px', fontSize: '1.1rem' }}>アクションを選択</h3>
 
+                                    <div style={{ fontSize: '0.9rem', color: '#6B7280', marginBottom: '8px', fontWeight: 'bold' }}>【アクション】</div>
                                     <button
                                         onClick={() => {
                                             setShowPostOptions(false);
@@ -1025,12 +942,95 @@ const MapPage = () => {
                                         ⚡️ クイック投稿
                                     </button>
 
+                                    <div style={{ borderTop: '1px solid #E5E7EB', margin: '16px 0 8px 0' }} />
+                                    <div style={{ fontSize: '0.9rem', color: '#6B7280', marginBottom: '12px', fontWeight: 'bold' }}>【マップ表示設定】</div>
+
+                                    {/* Map Display Toggles */}
+                                    <div style={{
+                                        display: 'flex',
+                                        backgroundColor: '#E5E7EB',
+                                        borderRadius: '12px',
+                                        padding: '4px',
+                                        marginBottom: '12px',
+                                        width: '100%'
+                                    }}>
+                                        <button
+                                            onClick={() => setActiveMapLayer('public')}
+                                            style={{
+                                                flex: 1,
+                                                padding: '12px',
+                                                borderRadius: '8px',
+                                                border: 'none',
+                                                backgroundColor: activeMapLayer === 'public' ? '#FFFFFF' : 'transparent',
+                                                color: activeMapLayer === 'public' ? 'var(--color-primary)' : '#6B7280',
+                                                fontWeight: activeMapLayer === 'public' ? 'bold' : '600',
+                                                fontSize: '0.95rem',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.3s ease',
+                                                boxShadow: activeMapLayer === 'public' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
+                                            }}
+                                        >
+                                            🌍 みんなのマップ
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (!currentUser || currentUser.isAnonymous) {
+                                                    alert("自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）");
+                                                    return;
+                                                }
+                                                setActiveMapLayer('myMap');
+                                            }}
+                                            style={{
+                                                flex: 1,
+                                                padding: '12px',
+                                                borderRadius: '8px',
+                                                border: 'none',
+                                                backgroundColor: activeMapLayer === 'myMap' ? '#FFFFFF' : 'transparent',
+                                                color: activeMapLayer === 'myMap' ? 'var(--color-primary)' : '#6B7280',
+                                                fontWeight: activeMapLayer === 'myMap' ? 'bold' : '600',
+                                                fontSize: '0.95rem',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.3s ease',
+                                                boxShadow: activeMapLayer === 'myMap' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
+                                            }}
+                                        >
+                                            🗺️ マイマップ
+                                        </button>
+                                    </div>
+
+                                    {activeMapLayer === 'public' && (
+                                        <button
+                                            onClick={() => setShowArchived(!showArchived)}
+                                            style={{
+                                                width: '100%',
+                                                marginBottom: '16px',
+                                                backgroundColor: showArchived ? 'var(--color-primary)' : '#F3F4F6',
+                                                color: showArchived ? 'white' : '#4B5563',
+                                                border: 'none',
+                                                borderRadius: '12px',
+                                                padding: '14px',
+                                                fontSize: '1rem',
+                                                fontWeight: 'bold',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s ease',
+                                            }}
+                                        >
+                                            🕒 過去情報: {showArchived ? 'ON (直近48時間以上の情報も表示)' : 'OFF (直近48時間の情報のみ)'}
+                                        </button>
+                                    )}
+
                                     <button
                                         onClick={() => setShowPostOptions(false)}
                                         className="btn btn-secondary"
-                                        style={{ width: '100%', padding: '16px', borderRadius: '12px', backgroundColor: '#fff', border: 'none', color: '#6B7280' }}
+                                        style={{ width: '100%', padding: '16px', borderRadius: '12px', backgroundColor: 'transparent', border: '1px solid #E5E7EB', color: '#6B7280', marginTop: '8px' }}
                                     >
-                                        キャンセル
+                                        閉じる
                                     </button>
                                 </div>
                                 <style>{`
