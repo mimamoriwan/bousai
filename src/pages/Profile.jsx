@@ -479,6 +479,44 @@ const Profile = () => {
                 </div>
             </div>
 
+            {/* ご意見・不具合報告バナー (Top Placement) */}
+            <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                <a
+                    href="https://docs.google.com/forms/d/e/1FAIpQLSdKR9YyFTrH7SoPCxs7EihjomraeT_HRhH8D_Frs6NN3HoOgw/viewform?usp=publish-editor"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="card"
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '16px',
+                        margin: 0,
+                        backgroundColor: '#FFFBEB',
+                        border: '2px solid #FCD34D',
+                        borderRadius: '16px',
+                        textDecoration: 'none',
+                        color: '#B45309',
+                        boxShadow: '0 4px 6px -1px rgba(251, 191, 36, 0.2), 0 2px 4px -1px rgba(251, 191, 36, 0.1)'
+                    }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ fontSize: '1.8rem', flexShrink: 0 }}>📢</span>
+                        <div>
+                            <div style={{ fontWeight: 'bold', fontSize: '1.05rem', marginBottom: '4px' }}>不具合・ご意見の報告</div>
+                            <div style={{ fontSize: '0.8rem', color: '#D97706', lineHeight: 1.3 }}>
+                                より良いアプリにするため、<br />お気づきの点をお教えください🐾
+                            </div>
+                        </div>
+                    </div>
+                    <div style={{ color: '#F59E0B', flexShrink: 0 }}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                    </div>
+                </a>
+            </div>
+
             <div className="card emergency-card" style={{ borderLeft: '4px solid var(--color-danger)', backgroundColor: '#ffffff' }} ref={emergencyCardRef}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
                     <h3 style={{ margin: 0 }}>お守りカード</h3>
@@ -630,28 +668,7 @@ const Profile = () => {
                 </div>
             )}
 
-            <div style={{ marginTop: 'var(--spacing-lg)', marginBottom: 'var(--spacing-lg)' }}>
-                <a
-                    href="https://docs.google.com/forms/d/e/1FAIpQLSdKR9YyFTrH7SoPCxs7EihjomraeT_HRhH8D_Frs6NN3HoOgw/viewform?usp=publish-editor"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn"
-                    style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        backgroundColor: 'transparent',
-                        color: 'var(--color-text-sub)',
-                        border: '1px solid var(--color-border)',
-                        textDecoration: 'none',
-                        fontSize: '0.9rem'
-                    }}
-                >
-                    💡 ご意見・不具合の報告
-                </a>
-            </div>
+            {/* Logout is now directly below user posts */}
             <button onClick={logout} className="btn" style={{ width: '100%', marginTop: 'var(--spacing-md)', backgroundColor: '#F3F4F6', color: '#4B5563', border: 'none' }}>
                 ログアウト
             </button>

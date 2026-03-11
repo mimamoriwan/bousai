@@ -176,6 +176,13 @@ const MapPage = () => {
     const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null, visibility: 'public' });
     const [isProcessingImage, setIsProcessingImage] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false); // For Firebase Submit Loading state
+
+    // Quick Post State
+    const [showQuickPostSheet, setShowQuickPostSheet] = useState(false);
+    const [quickPostStep, setQuickPostStep] = useState(1);
+    const [quickPostData, setQuickPostData] = useState({ title: '', type: 'danger' });
+    const [showSuccessToast, setShowSuccessToast] = useState(false);
+
     const { currentUser, memberNumber } = useAuth();
     const navigate = useNavigate();
 
@@ -610,6 +617,91 @@ const MapPage = () => {
         }
     });
 
+    const closeQuickPost = () => {
+        setShowQuickPostSheet(false);
+        setQuickPostStep(1);
+        setPostForm(prev => ({ ...prev, image: null }));
+    };
+
+    const handleQuickPostSubmit = async (withPhoto = false, imageDataUrl = null) => {
+        if (currentUser && currentUser.isAnonymous) {
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const todayPostsCount = userPosts.filter(p => p.uid === currentUser.uid && p.timestamp >= startOfToday.getTime()).length;
+            if (todayPostsCount >= 3) {
+                alert("お試しモードでの投稿は1日3回までです。\n制限を解除するにはマイページからGoogleで本登録を行ってください。");
+                return;
+            }
+        }
+
+        setIsSubmitting(true);
+        try {
+            let lat, lng;
+            try {
+                const pos = await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 5000 });
+                });
+                lat = pos.coords.latitude;
+                lng = pos.coords.longitude;
+            } catch (err) {
+                console.warn("Geolocation fallback for Quick Post:", err);
+                if (initialCenter) {
+                    lat = initialCenter[0];
+                    lng = initialCenter[1];
+                } else {
+                    alert("現在地を取得できませんでした。");
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
+
+            let imageUrl = null;
+            let imagePath = null;
+            const finalImage = imageDataUrl || postForm.image;
+            if (withPhoto && finalImage) {
+                const mimeTypeMatch = finalImage.match(/data:(.*?);/);
+                const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
+                const ext = mimeType === 'image/webp' ? 'webp' : 'jpg';
+                const filename = `map_pins/${Date.now()}.${ext}`;
+                const storageRef = ref(storage, filename);
+                await uploadString(storageRef, finalImage, 'data_url');
+                imageUrl = await getDownloadURL(storageRef);
+                imagePath = filename;
+            }
+
+            const newPostData = {
+                lat, lng,
+                type: quickPostData.type,
+                title: quickPostData.title,
+                note: '',
+                date: new Date().toLocaleDateString(),
+                timestamp: Date.now(),
+                imageUrl: imageUrl,
+                imagePath: imagePath,
+                resolved: false,
+                thanks: [],
+                savedBy: [],
+                visibility: 'public', // Quick post is always public default for MVP quickness
+                uid: currentUser ? currentUser.uid : null,
+                memberNumber: currentUser && !currentUser.isAnonymous && memberNumber ? memberNumber : null
+            };
+
+            await addDoc(collection(db, "map_pins"), newPostData);
+
+            setShowQuickPostSheet(false);
+            setQuickPostStep(1);
+            setPostForm(prev => ({ ...prev, image: null }));
+            setShowSuccessToast(true);
+            setTimeout(() => setShowSuccessToast(false), 3000);
+
+        } catch (error) {
+            console.error("Error adding quick post: ", error);
+            alert("投稿の保存に失敗しました。もう一度お試しください。");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     return (
         <div className="map-page" style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
 
@@ -732,11 +824,75 @@ const MapPage = () => {
                                     </div>
                                 )}
 
+                                {/* Go to Current Location FAB */}
+                                <div style={{ position: 'absolute', bottom: 'calc(25vh + 100px)', right: '20px', zIndex: 1000 }}>
+                                    <button
+                                        onClick={() => {
+                                            if (showQuickPostSheet) closeQuickPost();
+                                            if (!navigator.geolocation) {
+                                                alert("お使いの端末・ブラウザでは現在地取得機能がサポートされていません。");
+                                                return;
+                                            }
+                                            navigator.geolocation.getCurrentPosition(
+                                                (pos) => {
+                                                    const { latitude, longitude } = pos.coords;
+                                                    if (mapRef.current) {
+                                                        mapRef.current.flyTo([latitude, longitude], 16, {
+                                                            animate: true,
+                                                            duration: 1.5
+                                                        });
+                                                    }
+                                                },
+                                                (error) => {
+                                                    console.warn("Geolocation Error:", error);
+                                                    let errorMessage = "現在地を取得できませんでした。";
+                                                    if (error.code === 1) errorMessage = "位置情報の利用が許可されていません。端末の設定をご確認ください。";
+                                                    if (error.code === 2) errorMessage = "電波状況などの原因により、位置情報を特定できませんでした。";
+                                                    if (error.code === 3) errorMessage = "位置情報の取得がタイムアウトしました。もう一度お試しください。";
+                                                    alert(errorMessage);
+                                                },
+                                                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                                            );
+                                        }}
+                                        style={{
+                                            backgroundColor: 'white',
+                                            color: 'var(--color-primary)',
+                                            width: '50px',
+                                            height: '50px',
+                                            borderRadius: '50%',
+                                            boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '1.6rem',
+                                            transition: 'transform 0.1s, background-color 0.2s',
+                                            cursor: 'pointer',
+                                            border: 'none',
+                                            padding: 0
+                                        }}
+                                        onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.9)'}
+                                        onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                        onTouchStart={(e) => e.currentTarget.style.transform = 'scale(0.9)'}
+                                        onTouchEnd={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                                        title="現在地に戻る"
+                                        aria-label="現在地に戻る"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="28px" height="28px">
+                                            <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+                                        </svg>
+                                    </button>
+                                </div>
+
                                 <div style={{ position: 'absolute', bottom: 'calc(25vh + 30px)', right: '16px', zIndex: 1000 }}>
                                     <button
                                         onClick={() => {
                                             if (!requireAuth('アクションメニューを開く')) return;
-                                            setShowPostOptions(true);
+                                            if (showQuickPostSheet) {
+                                                closeQuickPost();
+                                                return;
+                                            }
+                                            setShowPostOptions(!showPostOptions);
                                         }}
                                         className={`btn ${isWalking ? 'active-pulse' : ''}`}
                                         style={{
@@ -841,6 +997,32 @@ const MapPage = () => {
                                         }}
                                     >
                                         {isWalking ? '🛑 お散歩を終了する' : '🐶 お散歩を開始する'}
+                                    </button>
+
+                                    <button
+                                        onClick={() => {
+                                            setShowPostOptions(false);
+                                            setQuickPostStep(1);
+                                            setShowQuickPostSheet(true);
+                                        }}
+                                        className="btn"
+                                        style={{
+                                            width: '100%',
+                                            marginBottom: '16px',
+                                            fontSize: '1.2rem',
+                                            padding: '16px',
+                                            backgroundColor: '#FFF7ED',
+                                            color: '#EA580C',
+                                            borderRadius: '12px',
+                                            border: '1px solid #FED7AA',
+                                            fontWeight: 'bold',
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            gap: '8px'
+                                        }}
+                                    >
+                                        ⚡️ クイック投稿
                                     </button>
 
                                     <button
@@ -1296,8 +1478,39 @@ const MapPage = () => {
                 )}
             </div>
 
+            {/* Success Toast UI */}
+            {showSuccessToast && (
+                <div style={{
+                    position: 'fixed',
+                    top: 'max(20px, env(safe-area-inset-top))',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    backgroundColor: '#10B981',
+                    color: 'white',
+                    padding: '12px 24px',
+                    borderRadius: '24px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    zIndex: 4000,
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    animation: 'slideDownFadeOut 3s forwards'
+                }}>
+                    ✅ 報告完了しました！
+                </div>
+            )}
+            <style>{`
+                @keyframes slideDownFadeOut {
+                    0% { transform: translate(-50%, -20px); opacity: 0; }
+                    10% { transform: translate(-50%, 0); opacity: 1; }
+                    80% { transform: translate(-50%, 0); opacity: 1; }
+                    100% { transform: translate(-50%, -20px); opacity: 0; }
+                }
+            `}</style>
+
             <BottomSheet
-                open={!isSelectingLocation}
+                open={!isSelectingLocation && !showQuickPostSheet}
                 blocking={false}
                 snapPoints={({ maxHeight }) => [
                     maxHeight * 0.3, // 初期状態（タブと1つ目の投稿が見える程度）
@@ -1521,6 +1734,188 @@ const MapPage = () => {
                             </p>
                         )}
                     </PullToRefresh>
+                </div>
+            </BottomSheet>
+
+            {/* Quick Post Bottom Sheet */}
+            <BottomSheet
+                open={showQuickPostSheet}
+                onDismiss={closeQuickPost}
+                blocking={true} // Use built-in RSBS backdrop for reliable z-index and Sibling separation
+                snapPoints={({ maxHeight }) => [maxHeight * 0.55, maxHeight * 0.9]}
+                defaultSnap={({ snapPoints }) => snapPoints[0]}
+                style={{
+                    '--rsbs-backdrop-bg': 'rgba(0, 0, 0, 0.5)',
+                    zIndex: 3000
+                }}
+            >
+                <div
+                    style={{
+                        padding: '16px 20px calc(100px + env(safe-area-inset-bottom))',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '16px',
+                        position: 'relative'
+                    }}
+                >
+                    <button
+                        onClick={closeQuickPost}
+                        style={{
+                            position: 'absolute',
+                            top: '12px',
+                            right: '20px',
+                            background: '#F3F4F6',
+                            border: 'none',
+                            color: '#6B7280',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '1rem',
+                            cursor: 'pointer',
+                            zIndex: 10
+                        }}
+                        aria-label="閉じる"
+                    >
+                        ✖️
+                    </button>
+
+                    {quickPostStep === 1 ? (
+                        <>
+                            <h3 style={{ textAlign: 'center', margin: '0 0 16px', fontSize: '1.2rem' }}>何がありましたか？</h3>
+                            <button
+                                onClick={() => {
+                                    setQuickPostData({ title: 'ゴミが落ちてるよ', type: 'danger' });
+                                    setQuickPostStep(2);
+                                }}
+                                style={{
+                                    width: '100%', padding: '20px', borderRadius: '16px', border: '1px solid #E5E7EB',
+                                    backgroundColor: '#F9FAFB', fontSize: '1.3rem', fontWeight: 'bold',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)', cursor: 'pointer'
+                                }}
+                            >
+                                🗑️ ゴミが落ちてるよ
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setQuickPostData({ title: 'うんち落ちてる！', type: 'danger' });
+                                    setQuickPostStep(2);
+                                }}
+                                style={{
+                                    width: '100%', padding: '20px', borderRadius: '16px', border: '1px solid #E5E7EB',
+                                    backgroundColor: '#F9FAFB', fontSize: '1.3rem', fontWeight: 'bold',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)', cursor: 'pointer'
+                                }}
+                            >
+                                💩 うんち落ちてる！
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setQuickPostData({ title: '危険なところがあるよ', type: 'danger' });
+                                    setQuickPostStep(2);
+                                }}
+                                style={{
+                                    width: '100%', padding: '20px', borderRadius: '16px', border: '1px solid #E5E7EB',
+                                    backgroundColor: '#FEF2F2', color: '#DC2626', fontSize: '1.3rem', fontWeight: 'bold',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)', cursor: 'pointer'
+                                }}
+                            >
+                                ⚠️ 危険なところがあるよ
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                                <button
+                                    onClick={() => {
+                                        setQuickPostStep(1);
+                                        setPostForm(prev => ({ ...prev, image: null }));
+                                    }}
+                                    style={{ background: 'none', border: 'none', color: '#6B7280', fontSize: '1.2rem', cursor: 'pointer', padding: '4px' }}
+                                >
+                                    ◀️ 戻る
+                                </button>
+                                <h3 style={{ margin: 0, fontSize: '1.2rem', flex: 1, textAlign: 'center' }}>
+                                    {quickPostData.title}
+                                </h3>
+                                <div style={{ width: '40px' }}></div> {/* Spacer for centering */}
+                            </div>
+
+                            <button
+                                onClick={() => handleQuickPostSubmit(false)}
+                                disabled={isSubmitting}
+                                style={{
+                                    width: '100%', padding: '24px', borderRadius: '16px', border: 'none',
+                                    backgroundColor: 'var(--color-primary)', color: 'white', fontSize: '1.4rem', fontWeight: 'bold',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+                                    boxShadow: '0 4px 12px rgba(249, 115, 22, 0.3)', cursor: 'pointer',
+                                    opacity: isSubmitting ? 0.7 : 1
+                                }}
+                            >
+                                {isSubmitting ? '送信中...' : '🚀 このまま投稿する'}
+                            </button>
+
+                            <div style={{ position: 'relative', margin: '16px 0', borderTop: '2px dashed #E5E7EB' }}></div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <label style={{
+                                    width: '100%', padding: '20px', borderRadius: '16px', border: '1px solid #D1D5DB',
+                                    backgroundColor: 'white', color: '#4B5563', fontSize: '1.2rem', fontWeight: 'bold',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+                                    cursor: 'pointer', margin: 0
+                                }}>
+                                    📷 写真を追加して投稿
+                                    <input
+                                        type="file"
+                                        accept="image/*,.heic,.heif"
+                                        style={{ display: 'none' }}
+                                        onChange={async (e) => {
+                                            const file = e.target.files[0];
+                                            if (file) {
+                                                setIsProcessingImage(true);
+                                                try {
+                                                    const { compressImage } = await import('../utils/imageUtils');
+                                                    const compressedDataUrl = await compressImage(file);
+                                                    await handleQuickPostSubmit(true, compressedDataUrl);
+                                                } catch (error) {
+                                                    console.error("Image compression failed", error);
+                                                    alert("画像の処理に失敗しました。");
+                                                } finally {
+                                                    setIsProcessingImage(false);
+                                                }
+                                            }
+                                        }}
+                                        disabled={isProcessingImage || isSubmitting}
+                                    />
+                                </label>
+                                {(isProcessingImage) && (
+                                    <div style={{ textAlign: 'center', color: 'var(--color-primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                        処理中... そのままお待ち下さい
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+
+                    {/* 下部の余白を埋めるスペーサーイラスト（メニュー被り防止） */}
+                    <div style={{ marginTop: 'auto', paddingTop: '8px', display: 'flex', justifyContent: 'center', width: '100%' }}>
+                        <img
+                            src="/toukou_botom.png"
+                            alt="みまもりWANの仲間たち"
+                            style={{
+                                width: '100%',
+                                height: 'auto',
+                                borderRadius: '12px',
+                                objectFit: 'cover',
+                                boxShadow: '0 4px 6px rgba(0,0,0,0.05)'
+                            }}
+                        />
+                    </div>
                 </div>
             </BottomSheet>
         </div>
