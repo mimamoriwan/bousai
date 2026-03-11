@@ -895,6 +895,11 @@ const MapPage = () => {
                                         🗺️ 地図から場所を選んで報告する
                                     </button>
 
+                                    {/* 
+                                     * [TODO]: お散歩モード（ルートトラッキング・共有機能）の再実装
+                                     * ユーザー同士のフレンド機能やグループ機能が実装され、
+                                     * プライバシー保護の仕組みが完全に整った段階で導入を検討するため一時的にコメントアウト
+                                     *
                                     <button
                                         onClick={() => {
                                             setShowPostOptions(false);
@@ -915,6 +920,7 @@ const MapPage = () => {
                                     >
                                         {isWalking ? '🛑 お散歩を終了する' : '🐶 お散歩を開始する'}
                                     </button>
+                                     */}
 
                                     <button
                                         onClick={() => {
