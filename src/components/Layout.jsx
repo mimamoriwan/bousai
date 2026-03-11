@@ -36,11 +36,14 @@ const Layout = () => {
                 </h1>
 
                 {/* Right: Member Badge */}
-                <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-                    <div className="member-badge">
-                        {currentUser && !currentUser.isAnonymous && memberNumber
-                            ? `No.${String(memberNumber).padStart(6, '0')}`
-                            : '見習い'}
+                <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', minWidth: 0 }}>
+                    <div className="member-badge" style={{ flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '4px 8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.3)' }}>
+                        <span style={{ fontSize: '0.55rem', lineHeight: '1', opacity: 0.9 }}>みまもり隊員</span>
+                        <span style={{ fontSize: '0.75rem', lineHeight: '1', fontWeight: 'bold' }}>
+                            {currentUser && !currentUser.isAnonymous && memberNumber
+                                ? `No.${String(memberNumber).padStart(5, '0')}`
+                                : '見習い'}
+                        </span>
                     </div>
                 </div>
             </header>
