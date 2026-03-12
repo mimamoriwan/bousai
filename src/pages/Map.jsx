@@ -78,16 +78,33 @@ const LocationMarker = ({ isPostMode, onMapClick }) => {
     useEffect(() => {
         map.locate().on("locationfound", function (e) {
             setPosition(e.latlng);
-            map.flyTo(e.latlng, map.getZoom());
+            map.locate({ setView: false, maxZoom: 16 }); // Update: setView to false for initial locate
         });
     }, [map]);
+
+    useMapEvents({
+        locationfound(e) {
+            setPosition(e.latlng);
+            // initialCenter is also updated in Map component useEffect,
+            // but local state is used to draw the marker
+        },
+    });
+
+    // Define currentLocationIcon here or import it if it's a global constant
+    const currentLocationIcon = L.divIcon({
+        className: 'user-location-icon',
+        html: '<div style="background-color: #EF4444; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+    });
 
     return (
         <>
             {position !== null && (
                 <Marker
                     position={position}
-                    icon={userIcon}
+                    icon={currentLocationIcon} // Changed from userIcon to currentLocationIcon
+                    zIndexOffset={10000} // Set very high zIndexOffset so it always stays on top
                     eventHandlers={{
                         click: () => {
                             if (isPostMode) {
@@ -103,34 +120,6 @@ const LocationMarker = ({ isPostMode, onMapClick }) => {
                     )}
                 </Marker>
             )}
-            <div style={{ position: 'absolute', bottom: '100px', right: '10px', zIndex: 1000 }}>
-                <button
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        // Reload the page to reset the map and fetch latest data
-                        window.location.reload();
-                    }}
-                    style={{
-                        backgroundColor: 'white',
-                        border: 'none',
-                        borderRadius: '50%',
-                        width: '44px',
-                        height: '44px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-                        fontSize: '20px'
-                    }}
-                    title="現在地に戻る"
-                >
-                    📍
-                </button>
-            </div>
-
-            {/* The floating button has been removed from here */}
         </>
     );
 };
@@ -163,14 +152,11 @@ const getRelativeTime = (timestamp) => {
 const MapPage = () => {
     // User Posts State (now driven by Firestore)
     const [userPosts, setUserPosts] = useState([]);
-    const [activeWalkers, setActiveWalkers] = useState([]); // Array of active walking users
     const [filter, setFilter] = useState('all');
     const [activeMapLayer, setActiveMapLayer] = useState('public');
     const [showArchived, setShowArchived] = useState(false); // Toggle for old posts
 
     const [isSelectingLocation, setIsSelectingLocation] = useState(false);
-    const [isWalking, setIsWalking] = useState(false);
-    const [localWalkStartTime, setLocalWalkStartTime] = useState(null); // Keep track locally for auto-clear
     const [showPostOptions, setShowPostOptions] = useState(false);
     const [tempPost, setTempPost] = useState(null); // { lat, lng }
     const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null, visibility: 'public' });
@@ -292,105 +278,13 @@ const MapPage = () => {
             console.error("Error fetching pins: ", error);
         });
 
-        // 🐶 Fetch active walkers (Osanpo Now feature)
-        // Currently querying all users and filtering on client side for MVP to avoid index requirements
-        // A composite index on `isWalking` would be required for a strictly targeted server query.
-        const walkersQuery = query(collection(db, 'users'));
-        const unsubscribeWalkers = onSnapshot(walkersQuery, (querySnapshot) => {
-            const walkers = [];
-            const now = Date.now();
-            querySnapshot.forEach((doc) => {
-                const data = doc.data();
-                if (data.isWalking === true) {
-                    // Check if walkStartTime exists and is within 30 minutes
-                    let isExpired = false;
-                    if (data.walkStartTime) {
-                        // walkStartTime can be a Firestore Timestamp object
-                        const startTimeMs = data.walkStartTime.toMillis ? data.walkStartTime.toMillis() : data.walkStartTime;
-                        if (now - startTimeMs >= 30 * 60 * 1000) {
-                            isExpired = true;
-                        }
-                    }
-
-                    if (!isExpired) {
-                        walkers.push({ id: doc.id, ...data });
-                    }
-                }
-            });
-            setActiveWalkers(walkers);
-        }, (error) => {
-            console.error("Error fetching active walkers: ", error);
-        });
-
         return () => {
             unsubscribe();
-            unsubscribeWalkers();
         };
     }, []);
 
-    // 🐾 Auto-clear current user's local walk status after 30 minutes
-    useEffect(() => {
-        let interval;
-        if (isWalking && localWalkStartTime && currentUser) {
-            interval = setInterval(async () => {
-                if (Date.now() - localWalkStartTime >= 30 * 60 * 1000) {
-                    try {
-                        console.log("30 minutes elapsed. Auto-clearing walk status...");
-                        await setDoc(doc(db, 'users', currentUser.uid), {
-                            isWalking: false,
-                            walkStartTime: null
-                        }, { merge: true });
-                        setIsWalking(false);
-                        setLocalWalkStartTime(null);
-                    } catch (error) {
-                        console.error("Error auto-ending walk:", error);
-                    }
-                }
-            }, 60000); // Check every minute
-        }
-        return () => {
-            if (interval) clearInterval(interval);
-        };
-    }, [isWalking, localWalkStartTime, currentUser]);
-
     const handleMapClick = (latlng) => {
         setTempPost(latlng);
-    };
-
-    const handleToggleWalk = async () => {
-        if (!currentUser) return;
-
-        if (isWalking) {
-            if (window.confirm('みまもり活動を終了しますか？')) {
-                try {
-                    await setDoc(doc(db, 'users', currentUser.uid), {
-                        isWalking: false,
-                        walkStartTime: null
-                    }, { merge: true });
-                    setIsWalking(false);
-                    setLocalWalkStartTime(null);
-                    alert("お散歩を終了しました。お疲れ様でした！");
-                } catch (error) {
-                    console.error("Error ending walk:", error);
-                    alert("お散歩状態の解除に失敗しました。");
-                }
-            }
-        } else {
-            if (window.confirm('みまもり活動（お散歩）を開始しますか？')) {
-                try {
-                    await setDoc(doc(db, 'users', currentUser.uid), {
-                        isWalking: true,
-                        walkStartTime: serverTimestamp()
-                    }, { merge: true });
-                    setIsWalking(true);
-                    setLocalWalkStartTime(Date.now()); // Set locally for interval check
-                    alert("お散歩に出発しました！🐾\n（ご近所のマップに30分間表示されます）");
-                } catch (error) {
-                    console.error("Error starting walk:", error);
-                    alert("お散歩の開始に失敗しました。");
-                }
-            }
-        }
     };
 
     const handlePostSubmit = async (e) => {
@@ -745,29 +639,44 @@ const MapPage = () => {
                                     <button
                                         onClick={() => {
                                             if (showQuickPostSheet) closeQuickPost();
+
+                                            const navigateToCenter = (lat, lng) => {
+                                                if (mapRef.current) {
+                                                    mapRef.current.setView([lat, lng], 16, {
+                                                        animate: true,
+                                                        duration: 0.5
+                                                    });
+                                                }
+                                            };
+
                                             if (!navigator.geolocation) {
-                                                alert("お使いの端末・ブラウザでは現在地取得機能がサポートされていません。");
+                                                if (initialCenter) {
+                                                    navigateToCenter(initialCenter[0], initialCenter[1]);
+                                                } else {
+                                                    alert("お使いの端末・ブラウザでは現在地取得機能がサポートされていません。");
+                                                }
                                                 return;
                                             }
+
+                                            // 1. Try to get a fresh position
                                             navigator.geolocation.getCurrentPosition(
                                                 (pos) => {
-                                                    const { latitude, longitude } = pos.coords;
-                                                    if (mapRef.current) {
-                                                        mapRef.current.flyTo([latitude, longitude], 16, {
-                                                            animate: true,
-                                                            duration: 1.5
-                                                        });
-                                                    }
+                                                    navigateToCenter(pos.coords.latitude, pos.coords.longitude);
                                                 },
                                                 (error) => {
-                                                    console.warn("Geolocation Error:", error);
-                                                    let errorMessage = "現在地を取得できませんでした。";
-                                                    if (error.code === 1) errorMessage = "位置情報の利用が許可されていません。端末の設定をご確認ください。";
-                                                    if (error.code === 2) errorMessage = "電波状況などの原因により、位置情報を特定できませんでした。";
-                                                    if (error.code === 3) errorMessage = "位置情報の取得がタイムアウトしました。もう一度お試しください。";
-                                                    alert(errorMessage);
+                                                    console.warn("Geolocation Error when seeking home:", error);
+                                                    // 2. Fallback to initialCenter if fetching a fresh one fails
+                                                    if (initialCenter) {
+                                                        console.log("Falling back to initialCenter tracking.");
+                                                        navigateToCenter(initialCenter[0], initialCenter[1]);
+                                                    } else {
+                                                        let errorMessage = "現在地を取得できませんでした。";
+                                                        if (error.code === 1) errorMessage = "位置情報の利用が許可されていません。端末の設定をご確認ください。";
+                                                        if (error.code === 2 || error.code === 3) errorMessage = "位置情報が取得できません。ブラウザの権限設定を確認してください。";
+                                                        alert(errorMessage);
+                                                    }
                                                 },
-                                                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                                                { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
                                             );
                                         }}
                                         style={{
@@ -810,14 +719,14 @@ const MapPage = () => {
                                             }
                                             setShowPostOptions(!showPostOptions);
                                         }}
-                                        className={`btn ${isWalking ? 'active-pulse' : ''}`}
+                                        className="btn"
                                         style={{
-                                            backgroundColor: !isWalking ? 'var(--color-primary)' : undefined, // Inherit CSS when active
+                                            backgroundColor: 'var(--color-primary)',
                                             color: 'white',
                                             width: '60px',
                                             height: '60px',
                                             borderRadius: '50%',
-                                            boxShadow: isWalking ? 'none' : '0 4px 10px rgba(0,0,0,0.3)',
+                                            boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
@@ -898,28 +807,7 @@ const MapPage = () => {
                                     {/* 
                                      * [TODO]: お散歩モード（ルートトラッキング・共有機能）の再実装
                                      * ユーザー同士のフレンド機能やグループ機能が実装され、
-                                     * プライバシー保護の仕組みが完全に整った段階で導入を検討するため一時的にコメントアウト
-                                     *
-                                    <button
-                                        onClick={() => {
-                                            setShowPostOptions(false);
-                                            handleToggleWalk();
-                                        }}
-                                        className="btn"
-                                        style={{
-                                            width: '100%',
-                                            marginBottom: '16px',
-                                            fontSize: '1.1rem',
-                                            padding: '16px',
-                                            backgroundColor: isWalking ? '#FEF2F2' : '#F0FDF4',
-                                            color: isWalking ? '#DC2626' : '#16A34A',
-                                            borderRadius: '12px',
-                                            border: `1px solid ${isWalking ? '#FCA5A5' : '#86EFAC'}`,
-                                            fontWeight: 'bold'
-                                        }}
-                                    >
-                                        {isWalking ? '🛑 お散歩を終了する' : '🐶 お散歩を開始する'}
-                                    </button>
+                                     * プライバシー保護の仕組みが完全に整った段階で導入を検討するため一時的に撤去
                                      */}
 
                                     <button
@@ -1525,7 +1413,7 @@ const MapPage = () => {
                 defaultSnap={({ snapPoints }) => snapPoints[0]}
                 header={
                     <div style={{ padding: '8px 16px 0 16px', maxWidth: '100vw', boxSizing: 'border-box' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                             <h3 style={{ margin: 0, fontSize: '1.2rem' }}>地域の最新情報</h3>
                             <button
                                 onClick={handleRefresh}
@@ -1546,70 +1434,15 @@ const MapPage = () => {
                             </button>
                         </div>
 
-                        {/* Stories-like Active Walkers UI */}
-                        {activeWalkers.length > 0 ? (
-                            <div style={{
-                                display: 'flex',
-                                overflowX: 'auto',
-                                gap: '12px',
-                                paddingBottom: '12px',
-                                marginBottom: '4px',
-                                touchAction: 'pan-x',
-                                scrollbarWidth: 'none', /* Firefox */
-                            }} className="map-top-filters">
-                                {activeWalkers.map(walker => (
-                                    <div key={walker.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '60px' }}>
-                                        <div style={{
-                                            width: '48px',
-                                            height: '48px',
-                                            borderRadius: '50%',
-                                            background: 'linear-gradient(45deg, #10B981, #34D399)',
-                                            padding: '2px', // Border gradient thickness
-                                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                                        }}>
-                                            <div style={{
-                                                width: '100%',
-                                                height: '100%',
-                                                borderRadius: '50%',
-                                                backgroundColor: 'white',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                overflow: 'hidden'
-                                            }}>
-                                                {walker.profileIconUrl ? (
-                                                    <img src={walker.profileIconUrl} alt={walker.petName || 'ペット'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                ) : (
-                                                    <span style={{ fontSize: '1.5rem' }}>🐶</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <span style={{ fontSize: '0.65rem', color: 'var(--color-text-sub)', marginTop: '4px', whiteSpace: 'nowrap', maxWidth: '60px', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>
-                                            {walker.petName || walker.displayName || '隊員'}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div style={{
-                                textAlign: 'center',
-                                padding: '12px 0',
-                                marginBottom: '4px',
-                                color: '#9CA3AF',
-                                fontSize: '0.8rem',
-                                backgroundColor: '#F9FAFB',
-                                borderRadius: '8px'
-                            }}>
-                                現在パトロール中の隊員はいません🐾
-                            </div>
-                        )}
-
                         {/* 【重要】タッチイベントがBottomSheetに吸い込まれるのを防ぐ */}
                         <div
                             className="map-top-filters"
+                            data-rsbs-no-pan="true"
                             onPointerDown={(e) => e.stopPropagation()}
                             onTouchStart={(e) => e.stopPropagation()}
                             onTouchMove={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ position: 'relative', zIndex: 100, pointerEvents: 'auto' }}
                         >
                             <button className={`filter-chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>すべて</button>
                             <button className={`filter-chip ${filter === 'walk' ? 'active' : ''}`} onClick={() => setFilter('walk')}>お散歩情報</button>
