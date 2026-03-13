@@ -657,6 +657,8 @@ const MapPage = () => {
                                                         animate: true,
                                                         duration: 0.5
                                                     });
+                                                    // 明示的に現在地ピン（赤いマーカー）にも更新を促す
+                                                    mapRef.current.fire('locationfound', { latlng: { lat, lng } });
                                                 }
                                             };
 
