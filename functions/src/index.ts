@@ -153,8 +153,8 @@ async function handleEvent(event: WebhookEvent): Promise<void> {
     }
     const imageMsg: ImageMessage = {
       type: "image",
-      originalContentUrl: "https://i.imgur.com/CpicTpd.jpeg",
-      previewImageUrl: "https://i.imgur.com/CpicTpd.jpeg",
+      originalContentUrl: "https://i.imgur.com/Yzqcsz2.jpeg",
+      previewImageUrl: "https://i.imgur.com/Yzqcsz2.jpeg",
       quickReply: {
         items: [
           {
