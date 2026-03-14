@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables (API keys - DO NOT COMMIT)
+.env
+.env.*
+!.env.example
