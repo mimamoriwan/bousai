@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, storage } from '../firebase';
-import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
 import html2canvas from 'html2canvas';
 import toast from 'react-hot-toast';
+import RouteEditor from '../components/RouteEditor';
 
 const Profile = () => {
     const { currentUser, memberNumber, linkWithGoogle, loginWithGoogle, loginAnonymously, logout } = useAuth();
@@ -34,6 +35,9 @@ const Profile = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [isSharing, setIsSharing] = useState(false);
+    // route editor state: { open: bool, editingRoute: null | routeObject }
+    const [routeEditorState, setRouteEditorState] = useState({ open: false, editingRoute: null });
+    const [savedRoutes, setSavedRoutes] = useState([]);
     const emergencyCardRef = useRef(null);
 
     useEffect(() => {
@@ -104,6 +108,45 @@ const Profile = () => {
         };
         fetchUserPosts();
     }, [currentUser, memberNumber]);
+    // MYルート一覧をリアルタイム購読
+    useEffect(() => {
+        if (!currentUser || currentUser.isAnonymous) return;
+        const routesRef = collection(db, 'users', currentUser.uid, 'routes');
+        const unsubscribe = onSnapshot(routesRef, (snap) => {
+            const routes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            routes.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+            setSavedRoutes(routes);
+        });
+        return () => unsubscribe();
+    }, [currentUser]);
+
+    const handleDeleteRoute = async (routeId, routeName) => {
+        if (!window.confirm(`「${routeName}」を削除しますか？`)) return;
+        try {
+            await deleteDoc(doc(db, 'users', currentUser.uid, 'routes', routeId));
+            toast.success('ルートを削除しました');
+        } catch (e) {
+            console.error(e);
+            toast.error('削除に失敗しました');
+        }
+    };
+
+    const openNewRoute = () => {
+        if (currentUser?.isAnonymous) {
+            toast.error('この機能はGoogle登録ユーザー限定です🐾');
+            return;
+        }
+        setRouteEditorState({ open: true, editingRoute: null });
+    };
+
+    const openEditRoute = (route) => {
+        setRouteEditorState({ open: true, editingRoute: route });
+    };
+
+    const closeRouteEditor = () => {
+        setRouteEditorState({ open: false, editingRoute: null });
+    };
+
     if (!currentUser) {
         return (
             <div className="profile-page" style={{ textAlign: 'center', padding: 'var(--spacing-lg) var(--spacing-md)' }}>
@@ -396,6 +439,7 @@ const Profile = () => {
     }
 
     return (
+        <>
         <div className="profile-page">
             {currentUser?.isAnonymous && (
                 <div style={{
@@ -572,6 +616,82 @@ const Profile = () => {
                 )}
             </div>
 
+            {/* 🗺️ MYお散歩ルートセクション */}
+            <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#15803D' }}>
+                        🗺️ MYお散歩ルート
+                    </div>
+                    <button
+                        onClick={openNewRoute}
+                        style={{
+                            padding: '7px 14px', borderRadius: '20px', border: 'none',
+                            backgroundColor: '#22C55E', color: 'white',
+                            fontWeight: 'bold', fontSize: '0.82rem',
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
+                            boxShadow: '0 2px 4px rgba(34,197,94,0.3)',
+                        }}
+                    >
+                        <span style={{ fontSize: '1rem' }}>+</span> 新しいコースを登録
+                    </button>
+                </div>
+
+                {currentUser?.isAnonymous ? (
+                    <div style={{ padding: '12px', backgroundColor: '#F3F4F6', borderRadius: '10px', fontSize: '0.82rem', color: '#6B7280', textAlign: 'center' }}>
+                        Google登録ユーザー限定の機能です🐾
+                    </div>
+                ) : savedRoutes.length === 0 ? (
+                    <div style={{ padding: '16px', backgroundColor: '#F0FDF4', borderRadius: '10px', border: '1.5px dashed #86EFAC', textAlign: 'center' }}>
+                        <div style={{ fontSize: '1.8rem', marginBottom: '6px' }}>🗺️</div>
+                        <div style={{ fontSize: '0.85rem', color: '#4B5563' }}>まだルートが登録されていません</div>
+                        <div style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '4px' }}>「＋ 新しいコースを登録」から安心な散歩ルートを登録しよう</div>
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {savedRoutes.map((route) => (
+                            <div
+                                key={route.id}
+                                style={{
+                                    backgroundColor: 'white', border: '1px solid #D1FAE5',
+                                    borderLeft: '4px solid #22C55E', borderRadius: '10px',
+                                    padding: '12px 14px', display: 'flex', alignItems: 'center',
+                                    justifyContent: 'space-between', gap: '8px',
+                                }}
+                            >
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 'bold', fontSize: '0.95rem', color: '#15803D', marginBottom: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        📍 {route.name}
+                                    </div>
+                                    <div style={{ fontSize: '0.72rem', color: '#6B7280' }}>
+                                        {route.totalDistanceM ? `約${(route.totalDistanceM / 1000).toFixed(1)}km` : ''}
+                                        {route.publicPath?.length === 0 && <span style={{ color: '#F59E0B', marginLeft: '6px' }}>⚠️公開パスなし</span>}
+                                        {route.updatedAt && <span style={{ marginLeft: '6px' }}>・ {new Date(route.updatedAt).toLocaleDateString('ja-JP')}</span>}
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                    <button
+                                        onClick={() => openEditRoute(route)}
+                                        style={{
+                                            padding: '6px 10px', borderRadius: '8px', border: '1px solid #D1D5DB',
+                                            backgroundColor: 'white', color: '#374151',
+                                            fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold',
+                                        }}
+                                    >✏️ 編集</button>
+                                    <button
+                                        onClick={() => handleDeleteRoute(route.id, route.name)}
+                                        style={{
+                                            padding: '6px 10px', borderRadius: '8px', border: '1px solid #FECACA',
+                                            backgroundColor: '#FEF2F2', color: '#DC2626',
+                                            fontSize: '0.8rem', cursor: 'pointer', fontWeight: 'bold',
+                                        }}
+                                    >🗑 削除</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
             {/* シェアボタン */}
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: '-8px', marginBottom: 'var(--spacing-lg)' }}>
                 <button
@@ -673,6 +793,16 @@ const Profile = () => {
                 ログアウト
             </button>
         </div >
+
+        {/* MYルート登録・編集モーダル */}
+        {routeEditorState.open && (
+            <RouteEditor
+                currentUser={currentUser}
+                onClose={closeRouteEditor}
+                editingRoute={routeEditorState.editingRoute}
+            />
+        )}
+        </>
     );
 };
 

@@ -144,30 +144,32 @@ async function handleEvent(event: WebhookEvent): Promise<void> {
   const replyToken = (event as { replyToken: string }).replyToken;
   const messageType = event.message.type;
 
-  // ── テキストメッセージ：「お散歩予報」のときだけ反応 ───────────────────
+  // ── テキストメッセージ：キーワードに応じて分岐 ─────────────────────────
   if (messageType === "text") {
     const textBody = (event.message as { text: string }).text.trim();
-    if (textBody !== "お散歩予報") {
-      // それ以外のテキストは無視
+
+    // 「お散歩予報」→ 画像 + 位置情報クイックリプライ
+    if (textBody === "お散歩予報") {
+      const imageMsg: ImageMessage = {
+        type: "image",
+        originalContentUrl: "https://i.imgur.com/Yzqcsz2.jpeg",
+        previewImageUrl: "https://i.imgur.com/Yzqcsz2.jpeg",
+        quickReply: {
+          items: [
+            {
+              type: "action",
+              action: {
+                type: "location",
+                label: "📍現在地を送る",
+              },
+            },
+          ],
+        },
+      };
+      await lineClient.replyMessage(replyToken, imageMsg);
       return;
     }
-    const imageMsg: ImageMessage = {
-      type: "image",
-      originalContentUrl: "https://i.imgur.com/Yzqcsz2.jpeg",
-      previewImageUrl: "https://i.imgur.com/Yzqcsz2.jpeg",
-      quickReply: {
-        items: [
-          {
-            type: "action",
-            action: {
-              type: "location",
-              label: "📍現在地を送る",
-            },
-          },
-        ],
-      },
-    };
-    await lineClient.replyMessage(replyToken, imageMsg);
+    // それ以外のテキストは無視
     return;
   }
 

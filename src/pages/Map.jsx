@@ -1,17 +1,18 @@
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import shelters from '../data/shelters.json';
 import { db, storage } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, updateDoc, arrayUnion, arrayRemove, getDocs, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, query, updateDoc, arrayUnion, arrayRemove, getDocs, setDoc, serverTimestamp, where, Timestamp } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 import { BottomSheet } from 'react-spring-bottom-sheet';
 import 'react-spring-bottom-sheet/dist/style.css';
+import SafetyReportModal from '../components/SafetyReportModal';
 
 // Fix for default marker icon
 let DefaultIcon = L.icon({
@@ -177,6 +178,12 @@ const MapPage = () => {
     const [quickPostStep, setQuickPostStep] = useState(1);
     const [quickPostData, setQuickPostData] = useState({ title: '', type: 'danger' });
     const [showSuccessToast, setShowSuccessToast] = useState(false);
+    // Safety Report State
+    const [showSafetyReport, setShowSafetyReport] = useState(false);
+    // 安全ヒートマップ用の報告データ
+    const [safetyReports, setSafetyReports] = useState([]);
+    // 表示モード: 'alert'（危険ピン）または 'safety'（安全ルート）
+    const [displayMode, setDisplayMode] = useState('alert');
 
     const { currentUser, memberNumber } = useAuth();
     const navigate = useNavigate();
@@ -290,6 +297,22 @@ const MapPage = () => {
         return () => {
             unsubscribe();
         };
+    }, []);
+
+    // 安全報告（safetyReports）を過去3日分取得（リアルタイム）
+    useEffect(() => {
+        const THREE_DAYS_AGO = Timestamp.fromMillis(Date.now() - 3 * 24 * 60 * 60 * 1000);
+        const q = query(
+            collection(db, 'safetyReports'),
+            where('createdAt', '>=', THREE_DAYS_AGO)
+        );
+        const unsubscribeSafety = onSnapshot(q, (snap) => {
+            const reports = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            setSafetyReports(reports);
+        }, (err) => {
+            console.error('safetyReports取得エラー:', err);
+        });
+        return () => unsubscribeSafety();
     }, []);
 
     const handleMapClick = (latlng) => {
@@ -645,6 +668,61 @@ const MapPage = () => {
                             <>
 
 
+                                {/* ── 表示モード切り替えタブ ── */}
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '12px',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    zIndex: 1100,
+                                    display: 'flex',
+                                    backgroundColor: 'rgba(255,255,255,0.95)',
+                                    borderRadius: '28px',
+                                    padding: '4px',
+                                    boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+                                    gap: '2px',
+                                    backdropFilter: 'blur(8px)',
+                                }}>
+                                    {/* ⚠️ 危険・注意タブ */}
+                                    <button
+                                        onClick={() => setDisplayMode('alert')}
+                                        style={{
+                                            padding: '8px 18px',
+                                            borderRadius: '24px',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            fontWeight: 'bold',
+                                            fontSize: '0.85rem',
+                                            whiteSpace: 'nowrap',
+                                            transition: 'all 0.2s',
+                                            backgroundColor: displayMode === 'alert' ? '#F59E0B' : 'transparent',
+                                            color: displayMode === 'alert' ? 'white' : '#6B7280',
+                                            boxShadow: displayMode === 'alert' ? '0 2px 6px rgba(245,158,11,0.4)' : 'none',
+                                        }}
+                                    >
+                                        ⚠️ 危険・注意
+                                    </button>
+                                    {/* 🟢 安全ルートタブ */}
+                                    <button
+                                        onClick={() => setDisplayMode('safety')}
+                                        style={{
+                                            padding: '8px 18px',
+                                            borderRadius: '24px',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            fontWeight: 'bold',
+                                            fontSize: '0.85rem',
+                                            whiteSpace: 'nowrap',
+                                            transition: 'all 0.2s',
+                                            backgroundColor: displayMode === 'safety' ? '#10B981' : 'transparent',
+                                            color: displayMode === 'safety' ? 'white' : '#6B7280',
+                                            boxShadow: displayMode === 'safety' ? '0 2px 6px rgba(16,185,129,0.4)' : 'none',
+                                        }}
+                                    >
+                                        🟢 安全ルート
+                                    </button>
+                                </div>
+
                                 {/* Go to Current Location FAB */}
                                 <div style={{ position: 'absolute', bottom: 'calc(25vh + 100px)', right: '20px', zIndex: 1000 }}>
                                     <button
@@ -832,8 +910,8 @@ const MapPage = () => {
                                         className="btn"
                                         style={{
                                             width: '100%',
-                                            marginBottom: '16px',
-                                            fontSize: '1.2rem',
+                                            marginBottom: '12px',
+                                            fontSize: '1.1rem',
                                             padding: '16px',
                                             backgroundColor: '#FFF7ED',
                                             color: '#EA580C',
@@ -847,6 +925,32 @@ const MapPage = () => {
                                         }}
                                     >
                                         ⚡️ クイック投稿
+                                    </button>
+
+                                    {/* 安全報告ボタン */}
+                                    <button
+                                        onClick={() => {
+                                            setShowPostOptions(false);
+                                            setShowSafetyReport(true);
+                                        }}
+                                        className="btn"
+                                        style={{
+                                            width: '100%',
+                                            marginBottom: '16px',
+                                            fontSize: '1.1rem',
+                                            padding: '16px',
+                                            backgroundColor: '#F0FDF4',
+                                            color: '#15803D',
+                                            borderRadius: '12px',
+                                            border: '1px solid #86EFAC',
+                                            fontWeight: 'bold',
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                        }}
+                                    >
+                                        🟢 お散歩異常なし報告
                                     </button>
 
                                     <div style={{ borderTop: '1px solid #E5E7EB', margin: '16px 0 8px 0' }} />
@@ -1242,8 +1346,46 @@ const MapPage = () => {
                                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             />
+
+                            {/* 🟢 安全ヒートマップ - displayMode === 'safety' のときのみ描画 */}
+                            {displayMode === 'safety' && safetyReports.map((report) => {
+                                const path = report.publicPath;
+                                if (!path || path.length < 2) return null;
+                                const positions = path.map((p) => [p.lat, p.lng]);
+                                return (
+                                    <>
+                                        {/* 背景線: 広く薄く（GPSの誤差吸収・道路幅をカバー） */}
+                                        <Polyline
+                                            key={`${report.id}-bg`}
+                                            positions={positions}
+                                            pathOptions={{
+                                                color: '#10B981',
+                                                weight: 24,
+                                                opacity: 0.1,
+                                                lineCap: 'round',
+                                                lineJoin: 'round',
+                                            }}
+                                        />
+                                        {/* 中心線: 芯として濃いめに */}
+                                        <Polyline
+                                            key={`${report.id}-core`}
+                                            positions={positions}
+                                            pathOptions={{
+                                                color: '#059669',
+                                                weight: 8,
+                                                opacity: 0.2,
+                                                lineCap: 'round',
+                                                lineJoin: 'round',
+                                            }}
+                                        />
+                                    </>
+                                );
+                            })}
                             <LocationMarker />
 
+                            {/* ⚠️ displayMode === 'alert' のときのみピンを表示 */}
+                            {displayMode === 'alert' && (
+                                <>
                             {/* Official Shelters */}
                             {shelters.filter(() => filter === 'shelter').map(shelter => (
                                 <Marker key={shelter.id} position={[shelter.lat, shelter.lng]}>
@@ -1389,6 +1531,8 @@ const MapPage = () => {
                                     </Marker>
                                 );
                             })}
+                                </> /* ⚠️ alert mode markers end */
+                            )}
                         </MapContainer>
                     </>
                 )}
@@ -1780,7 +1924,15 @@ const MapPage = () => {
                         />
                     </div>
                 </div>
-            </BottomSheet>
+                </BottomSheet>
+
+            {/* 🟢 お散歩異常なし報告モーダル */}
+            {showSafetyReport && (
+                <SafetyReportModal
+                    currentUser={currentUser}
+                    onClose={() => setShowSafetyReport(false)}
+                />
+            )}
         </div>
     );
 };
