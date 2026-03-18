@@ -48,6 +48,59 @@ const GuidePage = () => {
             <h2 style={{ marginBottom: 'var(--spacing-md)', fontSize: '1.1rem', color: 'var(--color-text)' }}>🕒 最近のアップデート</h2>
             <div className="card" style={{ marginBottom: 'var(--spacing-lg)' }}>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <li style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '16px' }}>
+                        <div style={{
+                            display: 'inline-block',
+                            fontSize: '0.75rem', fontWeight: 'bold',
+                            color: 'white',
+                            backgroundColor: 'var(--color-primary)',
+                            borderRadius: '999px',
+                            padding: '2px 10px',
+                            marginBottom: '10px',
+                        }}>2026/03/18 🆕 最新</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
+                            {/* 項目1 */}
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px', backgroundColor: '#FFF7ED', borderRadius: '10px' }}>
+                                <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>🐾</span>
+                                <div>
+                                    <div style={{ fontWeight: 'bold', fontSize: '0.92rem', color: '#92400E', marginBottom: '3px' }}>
+                                        登録不要！「お試しスタート」ができました
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem', color: '#78350F', lineHeight: '1.55' }}>
+                                        「まずはどんなアプリか触ってみたい」というお声にお応えして、Googleログインなしですぐに全機能を使い始められるようになりました！いつものお散歩で、地域の安全マップをぜひ体験してみてください。（記録を残したい場合は、後からいつでも無料でGoogle連携が可能です）
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 項目2 */}
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px', backgroundColor: '#F0FDF4', borderRadius: '10px' }}>
+                                <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>🟢</span>
+                                <div>
+                                    <div style={{ fontWeight: 'bold', fontSize: '0.92rem', color: '#14532D', marginBottom: '3px' }}>
+                                        ワンタップで貢献！「現在地で安全報告」ボタン追加
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem', color: '#166534', lineHeight: '1.55' }}>
+                                        お散歩中、「ここ見通しが良くて安全だな」と思ったら、右下の肉球ボタンから「現在地で安全報告」をタップ！事前のルート登録がなくても、思い立ったその場で直感的に地域の見守りに貢献できるようになりました。
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 項目3 */}
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px', backgroundColor: '#EFF6FF', borderRadius: '10px' }}>
+                                <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>✨</span>
+                                <div>
+                                    <div style={{ fontWeight: 'bold', fontSize: '0.92rem', color: '#1E3A5F', marginBottom: '3px' }}>
+                                        アクションメニューがさらに使いやすく！
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem', color: '#1e40af', lineHeight: '1.55' }}>
+                                        右下の肉球ボタン（投稿メニュー）のデザインをスッキリとリニューアルしました。スマホからでも押し間違いがなく、スムーズに安全・危険の報告が可能です。
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </li>
                     <li style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
                         <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)', marginBottom: '4px' }}>2026/03/11</div>
                         <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>
