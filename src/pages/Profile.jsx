@@ -132,10 +132,6 @@ const Profile = () => {
     };
 
     const openNewRoute = () => {
-        if (currentUser?.isAnonymous) {
-            toast.error('この機能はGoogle登録ユーザー限定です🐾');
-            return;
-        }
         setRouteEditorState({ open: true, editingRoute: null });
     };
 
@@ -163,7 +159,46 @@ const Profile = () => {
                     {isLoggingIn ? (
                         <div style={{ padding: '20px', color: 'var(--color-primary)', fontWeight: 'bold' }}>ログイン処理中...🐾</div>
                     ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+                            {/* ── メインCTA：お試しスタート ── */}
+                            <button
+                                onClick={async () => {
+                                    setIsLoggingIn(true);
+                                    try {
+                                        await loginAnonymously();
+                                    } catch (error) {
+                                        console.error('Anonymous login error:', error);
+                                        alert('お試しログインに失敗しました。');
+                                        setIsLoggingIn(false);
+                                    }
+                                }}
+                                style={{
+                                    width: '100%', padding: '18px 16px',
+                                    fontSize: '1.15rem', fontWeight: 'bold',
+                                    borderRadius: '14px', border: 'none',
+                                    background: 'linear-gradient(135deg, #F97316 0%, #FB923C 100%)',
+                                    color: 'white',
+                                    boxShadow: '0 6px 20px rgba(249,115,22,0.4)',
+                                    cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                                    letterSpacing: '0.02em',
+                                }}
+                            >
+                                🐶 お試しで始める（登録不要）
+                            </button>
+                            <p style={{ fontSize: '0.75rem', color: '#9CA3AF', margin: '-4px 0 4px', textAlign: 'center' }}>
+                                ※ 後からいつでもGoogleアカウントと連携できます
+                            </p>
+
+                            {/* 区切り */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '4px 0' }}>
+                                <div style={{ flex: 1, height: '1px', backgroundColor: '#E5E7EB' }} />
+                                <span style={{ fontSize: '0.78rem', color: '#9CA3AF', whiteSpace: 'nowrap' }}>または</span>
+                                <div style={{ flex: 1, height: '1px', backgroundColor: '#E5E7EB' }} />
+                            </div>
+
+                            {/* ── Google ログイン ── */}
                             <button
                                 onClick={async () => {
                                     setIsLoggingIn(true);
@@ -177,30 +212,16 @@ const Profile = () => {
                                 }}
                                 className="btn"
                                 style={{
-                                    width: '100%', padding: '16px', fontSize: '1.1rem', backgroundColor: 'white', color: '#333',
-                                    border: '1px solid #ddd', boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 'bold', borderRadius: '12px'
+                                    width: '100%', padding: '14px', fontSize: '0.95rem',
+                                    backgroundColor: 'white', color: '#333',
+                                    border: '1px solid #D1D5DB',
+                                    boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    gap: '8px', fontWeight: 'bold', borderRadius: '12px', cursor: 'pointer',
                                 }}
                             >
-                                <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path></svg>
-                                Googleでログインして始める
-                            </button>
-
-                            <button
-                                onClick={async () => {
-                                    setIsLoggingIn(true);
-                                    try {
-                                        await loginAnonymously();
-                                    } catch (error) {
-                                        console.error('Anonymous login error:', error);
-                                        alert('お試しログインに失敗しました。');
-                                        setIsLoggingIn(false);
-                                    }
-                                }}
-                                className="btn btn-secondary"
-                                style={{ width: '100%', padding: '14px', fontSize: '0.95rem', borderRadius: '12px' }}
-                            >
-                                🐶 見習い隊員（仮ユーザー）として使ってみる
+                                <svg width="18" height="18" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path></svg>
+                                Googleアカウントで始める
                             </button>
                         </div>
                     )}
@@ -441,43 +462,87 @@ const Profile = () => {
     return (
         <>
         <div className="profile-page">
-            {currentUser?.isAnonymous && (
-                <div style={{
-                    backgroundColor: '#FEF2F2',
-                    border: '1px solid #FCA5A5',
-                    borderRadius: '8px',
-                    padding: '16px',
-                    marginBottom: 'var(--spacing-md)',
-                    textAlign: 'center'
-                }}>
-                    <div style={{ color: '#DC2626', fontWeight: 'bold', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                        <span>⚠️</span> 現在は見習い隊員（お試し）です
+            {currentUser?.isAnonymous && (() => {
+                const creationTime = currentUser.metadata?.creationTime
+                    ? new Date(currentUser.metadata.creationTime)
+                    : null;
+                const daysSince = creationTime
+                    ? Math.floor((Date.now() - creationTime.getTime()) / (1000 * 60 * 60 * 24))
+                    : 0;
+                const isNearExpiry = daysSince >= 20;
+
+                return isNearExpiry ? (
+                    // 20日以上経過 → オレンジの促進アラート
+                    <div style={{
+                        background: 'linear-gradient(135deg, #FFF7ED 0%, #FEF3C7 100%)',
+                        border: '1.5px solid #FDBA74',
+                        borderRadius: '14px',
+                        padding: '16px',
+                        marginBottom: 'var(--spacing-md)',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+                            <span style={{ color: '#C2410C', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                お試し期間があと少しで終了します
+                            </span>
+                        </div>
+                        <p style={{ fontSize: '0.82rem', color: '#92400E', margin: '0 0 12px', lineHeight: 1.6 }}>
+                            これまでの記録を残すために、無料のGoogle連携をお願いします！
+                        </p>
+                        <button
+                            onClick={async () => {
+                                try { await linkWithGoogle(); }
+                                catch (e) { console.error(e); alert('Google連携に失敗しました。'); }
+                            }}
+                            style={{
+                                width: '100%', padding: '11px 16px',
+                                fontSize: '0.9rem', fontWeight: 'bold',
+                                borderRadius: '10px', border: 'none',
+                                backgroundColor: '#F97316', color: 'white',
+                                cursor: 'pointer',
+                                boxShadow: '0 3px 10px rgba(249,115,22,0.35)',
+                            }}
+                        >
+                            🔒 今すぐデータを守る（無料・Google連携）
+                        </button>
                     </div>
-                    <p style={{ fontSize: '0.85rem', color: '#B91C1C', marginBottom: '12px', marginTop: 0 }}>
-                        ブラウザを変えるとデータが消えるため、Googleでの本登録をおすすめします。<br />
-                        お試しモードでは1日3回までの投稿制限があります。
-                    </p>
-                    <button
-                        onClick={async () => {
-                            try {
-                                await linkWithGoogle();
-                            } catch (error) {
-                                console.error('Auth error:', error);
-                                alert('Google連携に失敗しました。');
-                            }
-                        }}
-                        className="btn"
-                        style={{
-                            width: '100%', padding: '8px', fontSize: '0.9rem', backgroundColor: 'white', color: '#333',
-                            border: '1px solid #ddd', boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 'bold'
-                        }}
-                    >
-                        <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path></svg>
-                        データを保存して全ての機能を使う
-                    </button>
-                </div>
-            )}
+                ) : (
+                    // 20日未満 → 優しい案内バナー
+                    <div style={{
+                        background: 'linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%)',
+                        border: '1.5px solid #93C5FD',
+                        borderRadius: '14px',
+                        padding: '14px 16px',
+                        marginBottom: 'var(--spacing-md)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
+                    }}>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#1D4ED8', marginBottom: '4px' }}>
+                                🐾 お試しモードでご利用中
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#3B82F6' }}>
+                                Googleと連携するとデータが永久に保存されます
+                            </div>
+                        </div>
+                        <button
+                            onClick={async () => {
+                                try { await linkWithGoogle(); }
+                                catch (e) { console.error(e); alert('Google連携に失敗しました。'); }
+                            }}
+                            style={{
+                                padding: '9px 14px', flexShrink: 0,
+                                fontSize: '0.78rem', fontWeight: 'bold',
+                                borderRadius: '10px', border: 'none',
+                                backgroundColor: '#2563EB', color: 'white',
+                                cursor: 'pointer', whiteSpace: 'nowrap',
+                                boxShadow: '0 2px 6px rgba(37,99,235,0.3)',
+                            }}
+                        >
+                            無料で保存する
+                        </button>
+                    </div>
+                );
+            })()}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
                 <h2 style={{ margin: 0 }}>マイ・ペット手帳</h2>
                 <button
@@ -636,11 +701,7 @@ const Profile = () => {
                     </button>
                 </div>
 
-                {currentUser?.isAnonymous ? (
-                    <div style={{ padding: '12px', backgroundColor: '#F3F4F6', borderRadius: '10px', fontSize: '0.82rem', color: '#6B7280', textAlign: 'center' }}>
-                        Google登録ユーザー限定の機能です🐾
-                    </div>
-                ) : savedRoutes.length === 0 ? (
+                {savedRoutes.length === 0 ? (
                     <div style={{ padding: '16px', backgroundColor: '#F0FDF4', borderRadius: '10px', border: '1.5px dashed #86EFAC', textAlign: 'center' }}>
                         <div style={{ fontSize: '1.8rem', marginBottom: '6px' }}>🗺️</div>
                         <div style={{ fontSize: '0.85rem', color: '#4B5563' }}>まだルートが登録されていません</div>

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import shelters from '../data/shelters.json';
 import { db, storage } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, updateDoc, arrayUnion, arrayRemove, getDocs, setDoc, serverTimestamp, where, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, query, updateDoc, arrayUnion, arrayRemove, getDocs, setDoc, serverTimestamp, where, Timestamp, GeoPoint } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -184,6 +184,8 @@ const MapPage = () => {
     const [safetyReports, setSafetyReports] = useState([]);
     // 表示モード: 'alert'（危険ピン）または 'safety'（安全ルート）
     const [displayMode, setDisplayMode] = useState('alert');
+    // スポット安全報告のローディング状態
+    const [isSpotReporting, setIsSpotReporting] = useState(false);
 
     const { currentUser, memberNumber } = useAuth();
     const navigate = useNavigate();
@@ -323,17 +325,6 @@ const MapPage = () => {
         e.preventDefault();
         if (!tempPost) return;
 
-        // --- Anonymous User Rate Limiting (Max 3 posts per day) ---
-        if (currentUser && currentUser.isAnonymous) {
-            const startOfToday = new Date();
-            startOfToday.setHours(0, 0, 0, 0);
-            const todayPostsCount = userPosts.filter(p => p.uid === currentUser.uid && p.timestamp >= startOfToday.getTime()).length;
-
-            if (todayPostsCount >= 3) {
-                alert("お試しモードでの投稿は1日3回までです。\n制限を解除するにはマイページからGoogleで本登録を行ってください。");
-                return;
-            }
-        }
 
         setIsSubmitting(true);
 
@@ -552,15 +543,6 @@ const MapPage = () => {
     };
 
     const handleQuickPostSubmit = async (withPhoto = false, imageDataUrl = null) => {
-        if (currentUser && currentUser.isAnonymous) {
-            const startOfToday = new Date();
-            startOfToday.setHours(0, 0, 0, 0);
-            const todayPostsCount = userPosts.filter(p => p.uid === currentUser.uid && p.timestamp >= startOfToday.getTime()).length;
-            if (todayPostsCount >= 3) {
-                alert("お試しモードでの投稿は1日3回までです。\n制限を解除するにはマイページからGoogleで本登録を行ってください。");
-                return;
-            }
-        }
 
         setIsSubmitting(true);
         try {
@@ -800,6 +782,7 @@ const MapPage = () => {
                                     </button>
                                 </div>
 
+
                                 <div style={{ position: 'absolute', bottom: 'calc(25vh + 30px)', right: '16px', zIndex: 1000 }}>
                                     <button
                                         onClick={() => {
@@ -838,7 +821,7 @@ const MapPage = () => {
                                 style={{
                                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
                                     backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 2000,
-                                    display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+                                    display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
                                 }}
                                 onClick={() => setShowPostOptions(false)}
                             >
@@ -847,203 +830,259 @@ const MapPage = () => {
                                     style={{
                                         width: '100%', maxWidth: '500px', margin: 0,
                                         borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
-                                        padding: '24px 20px', paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
-                                        animation: 'slideUp 0.3s ease-out'
+                                        padding: 0,
+                                        animation: 'slideUp 0.3s ease-out',
+                                        maxHeight: '85dvh',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        overflow: 'hidden',
                                     }}
                                     onClick={(e) => e.stopPropagation()}
                                 >
-                                    <h3 style={{ textAlign: 'center', marginBottom: '20px', fontSize: '1.1rem' }}>アクションを選択</h3>
-
-                                    <div style={{ fontSize: '0.9rem', color: '#6B7280', marginBottom: '8px', fontWeight: 'bold' }}>【アクション】</div>
-                                    <button
-                                        onClick={() => {
-                                            setShowPostOptions(false);
-                                            // Get precise current position if possible instead of relying solely on initialCenter
-                                            if (navigator.geolocation) {
-                                                navigator.geolocation.getCurrentPosition(
-                                                    (pos) => {
-                                                        setTempPost({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-                                                    },
-                                                    (err) => {
-                                                        console.warn("Geolocation fallback:", err);
-                                                        if (initialCenter) {
-                                                            setTempPost({ lat: initialCenter[0], lng: initialCenter[1] });
-                                                        } else {
-                                                            alert("現在地を取得できませんでした。");
-                                                        }
-                                                    },
-                                                    { enableHighAccuracy: true, timeout: 5000 }
-                                                );
-                                            } else if (initialCenter) {
-                                                setTempPost({ lat: initialCenter[0], lng: initialCenter[1] });
-                                            }
-                                        }}
-                                        className="btn btn-primary"
-                                        style={{ width: '100%', marginBottom: '12px', fontSize: '1.1rem', padding: '16px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
-                                    >
-                                        📍 今いる場所（現在地）で報告する
-                                    </button>
-
-                                    <button
-                                        onClick={() => {
-                                            setShowPostOptions(false);
-                                            setIsSelectingLocation(true);
-                                        }}
-                                        className="btn"
-                                        style={{ width: '100%', marginBottom: '16px', fontSize: '1.1rem', padding: '16px', backgroundColor: '#F3F4F6', color: '#1F2937', borderRadius: '12px', border: '1px solid #E5E7EB' }}
-                                    >
-                                        🗺️ 地図から場所を選んで報告する
-                                    </button>
-
-                                    {/* 
-                                     * [TODO]: お散歩モード（ルートトラッキング・共有機能）の再実装
-                                     * ユーザー同士のフレンド機能やグループ機能が実装され、
-                                     * プライバシー保護の仕組みが完全に整った段階で導入を検討するため一時的に撤去
-                                     */}
-
-                                    <button
-                                        onClick={() => {
-                                            setShowPostOptions(false);
-                                            setQuickPostStep(1);
-                                            setShowQuickPostSheet(true);
-                                        }}
-                                        className="btn"
-                                        style={{
-                                            width: '100%',
-                                            marginBottom: '12px',
-                                            fontSize: '1.1rem',
-                                            padding: '16px',
-                                            backgroundColor: '#FFF7ED',
-                                            color: '#EA580C',
-                                            borderRadius: '12px',
-                                            border: '1px solid #FED7AA',
-                                            fontWeight: 'bold',
-                                            display: 'flex',
-                                            justifyContent: 'center',
-                                            alignItems: 'center',
-                                            gap: '8px'
-                                        }}
-                                    >
-                                        ⚡️ クイック投稿
-                                    </button>
-
-                                    {/* 安全報告ボタン */}
-                                    <button
-                                        onClick={() => {
-                                            setShowPostOptions(false);
-                                            setShowSafetyReport(true);
-                                        }}
-                                        className="btn"
-                                        style={{
-                                            width: '100%',
-                                            marginBottom: '16px',
-                                            fontSize: '1.1rem',
-                                            padding: '16px',
-                                            backgroundColor: '#F0FDF4',
-                                            color: '#15803D',
-                                            borderRadius: '12px',
-                                            border: '1px solid #86EFAC',
-                                            fontWeight: 'bold',
-                                            display: 'flex',
-                                            justifyContent: 'center',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                        }}
-                                    >
-                                        🟢 お散歩異常なし報告
-                                    </button>
-
-                                    <div style={{ borderTop: '1px solid #E5E7EB', margin: '16px 0 8px 0' }} />
-                                    <div style={{ fontSize: '0.9rem', color: '#6B7280', marginBottom: '12px', fontWeight: 'bold' }}>【マップ表示設定】</div>
-
-                                    {/* Map Display Toggles */}
-                                    <div style={{
-                                        display: 'flex',
-                                        backgroundColor: '#E5E7EB',
-                                        borderRadius: '12px',
-                                        padding: '4px',
-                                        marginBottom: '12px',
-                                        width: '100%'
-                                    }}>
-                                        <button
-                                            onClick={() => setActiveMapLayer('public')}
-                                            style={{
-                                                flex: 1,
-                                                padding: '12px',
-                                                borderRadius: '8px',
-                                                border: 'none',
-                                                backgroundColor: activeMapLayer === 'public' ? '#FFFFFF' : 'transparent',
-                                                color: activeMapLayer === 'public' ? 'var(--color-primary)' : '#6B7280',
-                                                fontWeight: activeMapLayer === 'public' ? 'bold' : '600',
-                                                fontSize: '0.95rem',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.3s ease',
-                                                boxShadow: activeMapLayer === 'public' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
-                                            }}
-                                        >
-                                            🌍 みんなのマップ
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                if (!currentUser || currentUser.isAnonymous) {
-                                                    alert("自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）");
-                                                    return;
-                                                }
-                                                setActiveMapLayer('myMap');
-                                            }}
-                                            style={{
-                                                flex: 1,
-                                                padding: '12px',
-                                                borderRadius: '8px',
-                                                border: 'none',
-                                                backgroundColor: activeMapLayer === 'myMap' ? '#FFFFFF' : 'transparent',
-                                                color: activeMapLayer === 'myMap' ? 'var(--color-primary)' : '#6B7280',
-                                                fontWeight: activeMapLayer === 'myMap' ? 'bold' : '600',
-                                                fontSize: '0.95rem',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.3s ease',
-                                                boxShadow: activeMapLayer === 'myMap' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
-                                            }}
-                                        >
-                                            🗺️ マイマップ
-                                        </button>
+                                    {/* 固定ヘッダー */}
+                                    <div style={{ padding: '18px 20px 14px', flexShrink: 0, borderBottom: '1px solid #F3F4F6' }}>
+                                        <h3 style={{ textAlign: 'center', margin: 0, fontSize: '1.05rem', color: '#374151' }}>アクションを選択</h3>
                                     </div>
 
-                                    {activeMapLayer === 'public' && (
+                                    {/* スクロール可能エリア */}
+                                    <div style={{
+                                        overflowY: 'auto',
+                                        WebkitOverflowScrolling: 'touch',
+                                        overscrollBehaviorY: 'contain',
+                                        flex: 1,
+                                        padding: '10px 12px',
+                                        paddingBottom: 'max(70px, env(safe-area-inset-bottom))',
+                                    }}>
+
+                                        {/* ─── 2列グリッド：メインアクション ─── */}
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: '1fr 1fr',
+                                            gap: '7px',
+                                            marginBottom: '8px',
+                                        }}>
+                                            {/* 📍 現在地で報告 */}
+                                            <button
+                                                onClick={() => {
+                                                    setShowPostOptions(false);
+                                                    if (navigator.geolocation) {
+                                                        navigator.geolocation.getCurrentPosition(
+                                                            (pos) => setTempPost({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                                                            (err) => {
+                                                                console.warn('Geolocation fallback:', err);
+                                                                if (initialCenter) setTempPost({ lat: initialCenter[0], lng: initialCenter[1] });
+                                                                else alert('現在地を取得できませんでした。');
+                                                            },
+                                                            { enableHighAccuracy: true, timeout: 5000 }
+                                                        );
+                                                    } else if (initialCenter) {
+                                                        setTempPost({ lat: initialCenter[0], lng: initialCenter[1] });
+                                                    }
+                                                }}
+                                                style={{
+                                                    padding: '10px 8px', borderRadius: '12px', border: 'none',
+                                                    backgroundColor: 'var(--color-primary)', color: 'white',
+                                                    fontWeight: 'bold', cursor: 'pointer',
+                                                    display: 'flex', flexDirection: 'row',
+                                                    alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                                    boxShadow: '0 2px 6px rgba(255,111,0,0.3)',
+                                                    fontSize: '0.78rem',
+                                                }}
+                                            >
+                                                <span style={{ fontSize: '1.2rem' }}>📍</span>
+                                                現在地で報告
+                                            </button>
+
+                                            {/* 🗺️ 地図から選ぶ */}
+                                            <button
+                                                onClick={() => { setShowPostOptions(false); setIsSelectingLocation(true); }}
+                                                style={{
+                                                    padding: '10px 8px', borderRadius: '12px',
+                                                    backgroundColor: '#F3F4F6', color: '#1F2937',
+                                                    border: '1px solid #E5E7EB', fontWeight: 'bold', cursor: 'pointer',
+                                                    display: 'flex', flexDirection: 'row',
+                                                    alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                                    fontSize: '0.78rem',
+                                                }}
+                                            >
+                                                <span style={{ fontSize: '1.2rem' }}>🗺️</span>
+                                                地図から選ぶ
+                                            </button>
+
+                                            {/* ⚡️ クイック投稿 */}
+                                            <button
+                                                onClick={() => { setShowPostOptions(false); setQuickPostStep(1); setShowQuickPostSheet(true); }}
+                                                style={{
+                                                    padding: '10px 8px', borderRadius: '12px',
+                                                    backgroundColor: '#FFF7ED', color: '#EA580C',
+                                                    border: '1px solid #FED7AA', fontWeight: 'bold', cursor: 'pointer',
+                                                    display: 'flex', flexDirection: 'row',
+                                                    alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                                    fontSize: '0.78rem',
+                                                }}
+                                            >
+                                                <span style={{ fontSize: '1.2rem' }}>⚡️</span>
+                                                クイック投稿
+                                            </button>
+
+                                            {/* 🟢 スポット安全報告 */}
+                                            <button
+                                                onClick={async () => {
+                                                    setShowPostOptions(false);
+                                                    if (isSpotReporting) return;
+                                                    setIsSpotReporting(true);
+                                                    try {
+                                                        const pos = await new Promise((resolve, reject) =>
+                                                            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 })
+                                                        );
+                                                        const { latitude, longitude } = pos.coords;
+                                                        await addDoc(collection(db, 'safetyReports'), {
+                                                            reportType: 'spot',
+                                                            location: new GeoPoint(latitude, longitude),
+                                                            uid: currentUser?.uid || null,
+                                                            createdAt: serverTimestamp(),
+                                                        });
+                                                        import('react-hot-toast').then(({ default: toast }) =>
+                                                            toast.success('安全を報告しました！ありがとうございます🐾', { duration: 3000 })
+                                                        );
+                                                    } catch (err) {
+                                                        console.error('スポット安全報告エラー:', err);
+                                                        import('react-hot-toast').then(({ default: toast }) =>
+                                                            toast.error('報告に失敗しました。位置情報の許可を確認してください。')
+                                                        );
+                                                    } finally {
+                                                        setIsSpotReporting(false);
+                                                    }
+                                                }}
+                                                disabled={isSpotReporting}
+                                                style={{
+                                                    padding: '10px 8px', borderRadius: '12px',
+                                                    backgroundColor: isSpotReporting ? '#D1FAE5' : '#ECFDF5',
+                                                    color: '#065F46',
+                                                    border: '1px solid #6EE7B7', fontWeight: 'bold',
+                                                    cursor: isSpotReporting ? 'default' : 'pointer',
+                                                    display: 'flex', flexDirection: 'row',
+                                                    alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                                    fontSize: '0.78rem',
+                                                }}
+                                            >
+                                                {isSpotReporting ? (
+                                                    <>
+                                                        <span style={{
+                                                            width: '16px', height: '16px',
+                                                            border: '2px solid rgba(6,95,70,0.3)',
+                                                            borderTopColor: '#065F46',
+                                                            borderRadius: '50%',
+                                                            display: 'inline-block',
+                                                            animation: 'spin 0.8s linear infinite',
+                                                            flexShrink: 0,
+                                                        }} />
+                                                        取得中...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span style={{ fontSize: '1.2rem' }}>🟢</span>
+                                                        今ここ安全！
+                                                    </>
+                                                )}
+                                            </button>
+
+                                            {/* ✅ お散歩異常なし報告 */}
+                                            <button
+                                                onClick={() => { setShowPostOptions(false); setShowSafetyReport(true); }}
+                                                style={{
+                                                    padding: '10px 8px', borderRadius: '12px',
+                                                    backgroundColor: '#F0FDF4', color: '#15803D',
+                                                    border: '1px solid #86EFAC', fontWeight: 'bold', cursor: 'pointer',
+                                                    display: 'flex', flexDirection: 'row',
+                                                    alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                                    fontSize: '0.78rem',
+                                                }}
+                                            >
+                                                <span style={{ fontSize: '1.2rem' }}>✅</span>
+                                                お散歩異常なし
+                                            </button>
+                                        </div>
+
+                                        {/* ─── マップ表示設定 ─── */}
+                                        <div style={{ borderTop: '1px solid #E5E7EB', paddingTop: '8px', marginBottom: '6px' }}>
+                                            <div style={{ fontSize: '0.72rem', color: '#9CA3AF', marginBottom: '5px', fontWeight: 'bold', letterSpacing: '0.04em' }}>マップ表示設定</div>
+
+                                            {/* みんな / マイマップ トグル */}
+                                            <div style={{
+                                                display: 'flex', backgroundColor: '#E5E7EB',
+                                                borderRadius: '8px', padding: '3px', marginBottom: '5px',
+                                            }}>
+                                                <button
+                                                    onClick={() => setActiveMapLayer('public')}
+                                                    style={{
+                                                        flex: 1, padding: '7px 4px', borderRadius: '5px', border: 'none',
+                                                        backgroundColor: activeMapLayer === 'public' ? '#FFFFFF' : 'transparent',
+                                                        color: activeMapLayer === 'public' ? 'var(--color-primary)' : '#6B7280',
+                                                        fontWeight: activeMapLayer === 'public' ? 'bold' : '600',
+                                                        fontSize: '0.78rem', cursor: 'pointer',
+                                                        boxShadow: activeMapLayer === 'public' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                                        transition: 'all 0.2s',
+                                                    }}
+                                                >🌍 みんなのマップ</button>
+                                                <button
+                                                    onClick={() => {
+                                                        if (!currentUser || currentUser.isAnonymous) {
+                                                            alert('自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）');
+                                                            return;
+                                                        }
+                                                        setActiveMapLayer('myMap');
+                                                    }}
+                                                    style={{
+                                                        flex: 1, padding: '7px 4px', borderRadius: '5px', border: 'none',
+                                                        backgroundColor: activeMapLayer === 'myMap' ? '#FFFFFF' : 'transparent',
+                                                        color: activeMapLayer === 'myMap' ? 'var(--color-primary)' : '#6B7280',
+                                                        fontWeight: activeMapLayer === 'myMap' ? 'bold' : '600',
+                                                        fontSize: '0.78rem', cursor: 'pointer',
+                                                        boxShadow: activeMapLayer === 'myMap' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                                        transition: 'all 0.2s',
+                                                    }}
+                                                >🗺️ マイマップ</button>
+                                            </div>
+
+                                            {/* 過去情報トグル */}
+                                            {activeMapLayer === 'public' && (
+                                                <button
+                                                    onClick={() => setShowArchived(!showArchived)}
+                                                    style={{
+                                                        width: '100%', marginBottom: '5px',
+                                                        backgroundColor: showArchived ? 'var(--color-primary)' : '#F3F4F6',
+                                                        color: showArchived ? 'white' : '#4B5563',
+                                                        border: 'none', borderRadius: '8px',
+                                                        padding: '8px', fontSize: '0.78rem', fontWeight: 'bold',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
+                                                        cursor: 'pointer', transition: 'all 0.2s',
+                                                    }}
+                                                >
+                                                    🕒 過去情報: {showArchived ? 'ON' : 'OFF'}
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* ─── 閉じるボタン（全幅） ─── */}
                                         <button
-                                            onClick={() => setShowArchived(!showArchived)}
+                                            onClick={() => setShowPostOptions(false)}
                                             style={{
-                                                width: '100%',
-                                                marginBottom: '16px',
-                                                backgroundColor: showArchived ? 'var(--color-primary)' : '#F3F4F6',
-                                                color: showArchived ? 'white' : '#4B5563',
-                                                border: 'none',
-                                                borderRadius: '12px',
-                                                padding: '14px',
-                                                fontSize: '1rem',
-                                                fontWeight: 'bold',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: '8px',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.2s ease',
+                                                width: '100%', padding: '11px',
+                                                borderRadius: '10px',
+                                                backgroundColor: '#F9FAFB',
+                                                border: '1.5px solid #D1D5DB',
+                                                color: '#6B7280', fontWeight: 'bold',
+                                                fontSize: '0.88rem', cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center',
+                                                justifyContent: 'center', gap: '6px',
                                             }}
                                         >
-                                            🕒 過去情報: {showArchived ? 'ON (直近48時間以上の情報も表示)' : 'OFF (直近48時間の情報のみ)'}
+                                            ✕ 閉じる
                                         </button>
-                                    )}
 
-                                    <button
-                                        onClick={() => setShowPostOptions(false)}
-                                        className="btn btn-secondary"
-                                        style={{ width: '100%', padding: '16px', borderRadius: '12px', backgroundColor: 'transparent', border: '1px solid #E5E7EB', color: '#6B7280', marginTop: '8px' }}
-                                    >
-                                        閉じる
-                                    </button>
-                                </div>
+                                    </div> {/* スクロールコンテナ終了 */}
+                                </div> {/* カード終了 */}
                                 <style>{`
                                     @keyframes slideUp {
                                         from { transform: translateY(100%); }
