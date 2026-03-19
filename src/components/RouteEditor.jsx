@@ -205,17 +205,17 @@ const RouteEditor = ({ currentUser, onClose, editingRoute = null }) => {
                     </MapContainer>
                 )}
 
-                {/* ポイント数バッジ */}
-                <div style={{
-                    position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)',
-                    backgroundColor: 'rgba(0,0,0,0.65)', color: 'white',
-                    padding: '5px 12px', borderRadius: '20px', fontSize: '0.8rem',
-                    zIndex: 1000, whiteSpace: 'nowrap', pointerEvents: 'none',
-                }}>
-                    {points.length === 0
-                        ? 'マップをタップしてルートを描こう'
-                        : `📍 ${points.length}ポイント`}
-                </div>
+                {/* タップガイド（ポイント数は非表示） */}
+                {points.length === 0 && (
+                    <div style={{
+                        position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)',
+                        backgroundColor: 'rgba(0,0,0,0.55)', color: 'white',
+                        padding: '5px 14px', borderRadius: '20px', fontSize: '0.8rem',
+                        zIndex: 1000, whiteSpace: 'nowrap', pointerEvents: 'none',
+                    }}>
+                        マップをタップしてルートを描こう
+                    </div>
+                )}
             </div>
 
             {/* ── フッター（ルート名 + 操作ボタン） ── */}

@@ -46,6 +46,9 @@ export const AuthProvider = ({ children }) => {
 
     const logout = async () => {
         try {
+            // React状態を先にクリアして次回ログインフローに干渉しないようにする
+            setCurrentUser(null);
+            setMemberNumber(null);
             await signOut(auth);
         } catch (error) {
             console.error('Error signing out:', error);
@@ -60,6 +63,7 @@ export const AuthProvider = ({ children }) => {
                 if (result) {
                     console.log('Successfully completed redirect flow:', result);
                 }
+                // リダイレクト結果処理完了 — loading は onAuthStateChanged に委ねる
             }).catch(async (error) => {
                 console.error('Redirect auth error:', error);
                 if (error.code === 'auth/credential-already-in-use') {
@@ -70,7 +74,12 @@ export const AuthProvider = ({ children }) => {
                         await signInWithCredential(auth, credential);
                     } catch (signInError) {
                         console.error('Fallback sign-in failed', signInError);
+                        // フォールバックも失敗した場合はフリーズしないようloading解除
+                        setLoading(false);
                     }
+                } else {
+                    // その他のリダイレクトエラー（ポップアップブロック等）でもloading解除
+                    setLoading(false);
                 }
             });
 
@@ -137,3 +146,4 @@ export const AuthProvider = ({ children }) => {
         </AuthContext.Provider>
     );
 };
+

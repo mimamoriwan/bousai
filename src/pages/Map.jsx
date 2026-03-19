@@ -1,7 +1,9 @@
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+
+
 import { useNavigate } from 'react-router-dom';
 import shelters from '../data/shelters.json';
 import { db, storage } from '../firebase';
@@ -301,12 +303,12 @@ const MapPage = () => {
         };
     }, []);
 
-    // 安全報告（safetyReports）を過去3日分取得（リアルタイム）
+    // 安全報告（safetyReports）を過去6時間分取得（リアルタイム）
     useEffect(() => {
-        const THREE_DAYS_AGO = Timestamp.fromMillis(Date.now() - 3 * 24 * 60 * 60 * 1000);
+        const SIX_HOURS_AGO = Timestamp.fromMillis(Date.now() - 6 * 60 * 60 * 1000);
         const q = query(
             collection(db, 'safetyReports'),
-            where('createdAt', '>=', THREE_DAYS_AGO)
+            where('createdAt', '>=', SIX_HOURS_AGO)
         );
         const unsubscribeSafety = onSnapshot(q, (snap) => {
             const reports = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -1386,39 +1388,46 @@ const MapPage = () => {
                                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             />
 
-                            {/* 🟢 安全ヒートマップ - displayMode === 'safety' のときのみ描画 */}
+                            {/* 🟢 安全オーラ（疑似ヒートマップ）- displayMode === 'safety' のときのみ描画 */}
                             {displayMode === 'safety' && safetyReports.map((report) => {
-                                const path = report.publicPath;
-                                if (!path || path.length < 2) return null;
-                                const positions = path.map((p) => [p.lat, p.lng]);
-                                return (
-                                    <>
-                                        {/* 背景線: 広く薄く（GPSの誤差吸収・道路幅をカバー） */}
+                                // A. ルート報告：太い半透明Polylineで「光の帯」を表現
+                                if (report.publicPath && report.publicPath.length >= 2) {
+                                    const positions = report.publicPath.map((p) => [p.lat, p.lng]);
+                                    return (
                                         <Polyline
-                                            key={`${report.id}-bg`}
+                                            key={report.id}
                                             positions={positions}
                                             pathOptions={{
                                                 color: '#10B981',
-                                                weight: 24,
-                                                opacity: 0.1,
+                                                weight: 45,
+                                                opacity: 0.09,
                                                 lineCap: 'round',
                                                 lineJoin: 'round',
                                             }}
                                         />
-                                        {/* 中心線: 芯として濃いめに */}
-                                        <Polyline
-                                            key={`${report.id}-core`}
-                                            positions={positions}
+                                    );
+                                }
+                                // B. スポット報告：半透明Circleで「光の円」を表現
+                                if (report.reportType === 'spot' && report.location) {
+                                    const lat = typeof report.location.latitude === 'number'
+                                        ? report.location.latitude : report.location._lat;
+                                    const lng = typeof report.location.longitude === 'number'
+                                        ? report.location.longitude : report.location._long;
+                                    if (!lat || !lng) return null;
+                                    return (
+                                        <Circle
+                                            key={report.id}
+                                            center={[lat, lng]}
+                                            radius={70}
                                             pathOptions={{
-                                                color: '#059669',
-                                                weight: 8,
-                                                opacity: 0.2,
-                                                lineCap: 'round',
-                                                lineJoin: 'round',
+                                                fillColor: '#10B981',
+                                                fillOpacity: 0.09,
+                                                stroke: false,
                                             }}
                                         />
-                                    </>
-                                );
+                                    );
+                                }
+                                return null;
                             })}
                             <LocationMarker />
 
