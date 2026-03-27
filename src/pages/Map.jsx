@@ -83,6 +83,39 @@ const resolvedIcon = L.divIcon({
     iconAnchor: [18, 18]
 });
 
+// Walk specific icons
+const sniffIcon = L.divIcon({
+    className: 'custom-div-icon',
+    html: "<div style='background-color: #FBBF24; border: 2px solid white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);'>🐕</div>",
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -18]
+});
+
+const peeIcon = L.divIcon({
+    className: 'custom-div-icon',
+    html: "<div style='background-color: #38BDF8; border: 2px solid white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);'>💧</div>",
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -18]
+});
+
+const poopIcon = L.divIcon({
+    className: 'custom-div-icon',
+    html: "<div style='background-color: #A8A29E; border: 2px solid white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);'>💩</div>",
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -18]
+});
+
+const markIcon = L.divIcon({
+    className: 'custom-div-icon',
+    html: "<div style='background-color: #F43F5E; border: 2px solid white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);'>📍</div>",
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -18]
+});
+
 const LocationMarker = ({ isPostMode, onMapClick }) => {
     const [position, setPosition] = useState(null);
     const map = useMap();
@@ -182,6 +215,8 @@ const MapPage = () => {
     const [showSuccessToast, setShowSuccessToast] = useState(false);
     // Safety Report State
     const [showSafetyReport, setShowSafetyReport] = useState(false);
+    // Walk Recording Controller State
+    const [isWalkRecording, setIsWalkRecording] = useState(false);
     // 安全ヒートマップ用の報告データ
     const [safetyReports, setSafetyReports] = useState([]);
     // 表示モード: 'alert'（危険ピン）または 'safety'（安全ルート）
@@ -507,7 +542,7 @@ const MapPage = () => {
             // Type filtering for My Map
             if (filter !== 'all' && filter !== 'resolved') {
                 if (filter === 'walk') {
-                    if (post.type !== 'walk' && post.type !== 'useful') return false;
+                    if (!post.type.startsWith('walk') && post.type !== 'useful') return false;
                 } else {
                     if (post.type !== filter) return false;
                 }
@@ -525,8 +560,8 @@ const MapPage = () => {
             if (filter === 'resolved' && !post.resolved) return false;
             if (filter !== 'all' && filter !== 'resolved' && post.resolved) return false;
 
-            if (filter === 'walk' && post.type !== 'walk' && post.type !== 'useful') return false;
-            if (filter !== 'all' && filter !== 'resolved' && filter !== 'walk' && post.type !== filter) return false;
+            if (filter === 'walk' && !post.type.startsWith('walk') && post.type !== 'useful') return false;
+            if (filter !== 'all' && filter !== 'resolved' && filter !== 'walk' && post.type !== filter && !post.type.startsWith(filter)) return false;
 
             // 期限制限 (通常48時間、植物14日間)
             // 「すべて」タブなど、植物タブ「以外」を選択している場合は全て一律48時間
@@ -612,6 +647,46 @@ const MapPage = () => {
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const handleWalkPost = async (typeStr, titleStr) => {
+        if (!navigator.geolocation) {
+            import('react-hot-toast').then(({ default: toast }) => toast.error('位置情報が取得できません。設定を確認してください。'));
+            return;
+        }
+
+        import('react-hot-toast').then(({ default: toast }) => toast.success(`${titleStr}を記録しました🐾`, { duration: 2500, icon: '📍' }));
+        
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                const { latitude, longitude } = pos.coords;
+                try {
+                    const newPostData = {
+                        lat: latitude,
+                        lng: longitude,
+                        type: 'walk_' + typeStr,
+                        title: titleStr,
+                        note: '',
+                        date: new Date().toLocaleDateString(),
+                        timestamp: Date.now(),
+                        imageUrl: null,
+                        resolved: false,
+                        thanks: [],
+                        savedBy: [],
+                        visibility: 'public',
+                        uid: currentUser ? currentUser.uid : null,
+                        memberNumber: currentUser && !currentUser.isAnonymous && memberNumber ? memberNumber : null
+                    };
+                    await addDoc(collection(db, "map_pins"), newPostData);
+                } catch (err) {
+                    console.error('Walk Post Error:', err);
+                }
+            },
+            (err) => {
+                console.warn('Geolocation error:', err);
+            },
+            { enableHighAccuracy: true, timeout: 5000 }
+        );
     };
 
     return (
@@ -1003,6 +1078,25 @@ const MapPage = () => {
                                             >
                                                 <span style={{ fontSize: '1.2rem' }}>✅</span>
                                                 お散歩異常なし
+                                            </button>
+
+                                            {/* 🐾 お散歩記録をはじめる (全幅) */}
+                                            <button
+                                                onClick={() => { setShowPostOptions(false); setIsWalkRecording(true); }}
+                                                style={{
+                                                    gridColumn: '1 / -1',
+                                                    padding: '12px 8px', borderRadius: '12px',
+                                                    backgroundColor: '#FCE7F3', color: '#BE185D',
+                                                    border: '1px solid #FBCFE8', fontWeight: 'bold', cursor: 'pointer',
+                                                    display: 'flex', flexDirection: 'row',
+                                                    alignItems: 'center', justifyContent: 'center', gap: '8px',
+                                                    fontSize: '0.9rem',
+                                                    boxShadow: '0 2px 4px rgba(190, 24, 93, 0.15)',
+                                                    marginTop: '4px'
+                                                }}
+                                            >
+                                                <span style={{ fontSize: '1.4rem' }}>🐾</span>
+                                                お散歩記録をはじめる
                                             </button>
                                         </div>
 
@@ -1465,7 +1559,11 @@ const MapPage = () => {
                                     (post.type === 'danger' ? dangerIcon :
                                         (post.type === 'shelter' ? shelterIcon :
                                             (post.type === 'plant' ? plantIcon :
-                                                (post.type === 'others' ? othersIcon : walkIcon))));
+                                                (post.type === 'walk_sniff' ? sniffIcon :
+                                                    (post.type === 'walk_pee' ? peeIcon :
+                                                        (post.type === 'walk_poop' ? poopIcon :
+                                                            (post.type === 'walk_mark' ? markIcon :
+                                                                (post.type === 'others' ? othersIcon : walkIcon))))))));
 
                                 return (
                                     <Marker
@@ -1981,6 +2079,60 @@ const MapPage = () => {
                     onClose={() => setShowSafetyReport(false)}
                 />
             )}
+
+            {/* 🐾 お散歩記録コントローラー */}
+            <BottomSheet
+                open={isWalkRecording}
+                onDismiss={() => setIsWalkRecording(false)}
+                blocking={false}
+                snapPoints={({ maxHeight }) => [maxHeight * 0.35, 280]}
+                defaultSnap={({ maxHeight }) => 280}
+                expandOnContentDrag={true}
+                header={
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 8px' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1F2937', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            🐾 お散歩記録中...
+                        </h3>
+                        <button 
+                            onClick={() => setIsWalkRecording(false)}
+                            style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6B7280', padding: '4px' }}
+                        >×</button>
+                    </div>
+                }
+            >
+                <div style={{ padding: '16px 20px', paddingBottom: 'env(safe-area-inset-bottom, 24px)' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <button
+                            onClick={() => handleWalkPost('sniff', 'くん活')}
+                            style={{ padding: '16px 8px', borderRadius: '16px', background: '#FEF3C7', border: '1px solid #FDE68A', color: '#92400E', fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', cursor: 'pointer' }}
+                        >
+                            <span style={{ fontSize: '2rem' }}>🐕</span>
+                            くん活
+                        </button>
+                        <button
+                            onClick={() => handleWalkPost('pee', 'おしっこ')}
+                            style={{ padding: '16px 8px', borderRadius: '16px', background: '#E0F2FE', border: '1px solid #BAE6FD', color: '#0369A1', fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', cursor: 'pointer' }}
+                        >
+                            <span style={{ fontSize: '2rem' }}>💧</span>
+                            おしっこ
+                        </button>
+                        <button
+                            onClick={() => handleWalkPost('poop', 'うんち')}
+                            style={{ padding: '16px 8px', borderRadius: '16px', background: '#F5F5F4', border: '1px solid #E7E5E4', color: '#57534E', fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', cursor: 'pointer' }}
+                        >
+                            <span style={{ fontSize: '2rem' }}>💩</span>
+                            うんち
+                        </button>
+                        <button
+                            onClick={() => handleWalkPost('mark', 'マーキング')}
+                            style={{ padding: '16px 8px', borderRadius: '16px', background: '#FFE4E6', border: '1px solid #FECDD3', color: '#BE123C', fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', cursor: 'pointer' }}
+                        >
+                            <span style={{ fontSize: '2rem' }}>📍</span>
+                            マーキング
+                        </button>
+                    </div>
+                </div>
+            </BottomSheet>
         </div>
     );
 };
