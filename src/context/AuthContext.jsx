@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { onAuthStateChanged, signInWithRedirect, signOut, signInAnonymously, linkWithRedirect, getRedirectResult, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, runTransaction } from 'firebase/firestore';
 import { auth, provider, db } from '../firebase';
+import { hashUid } from '../utils/hashUtils';
 
 const AuthContext = createContext();
 
@@ -11,6 +12,7 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
     const [currentUser, setCurrentUser] = useState(null);
+    const [currentUserHash, setCurrentUserHash] = useState(null);
     const [memberNumber, setMemberNumber] = useState(null);
     const [loading, setLoading] = useState(true);
     const hasInitialized = useRef(false);
@@ -86,6 +88,7 @@ export const AuthProvider = ({ children }) => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 setCurrentUser(user);
+                hashUid(user.uid).then(setCurrentUserHash);
 
                 if (!user.isAnonymous) {
                     try {
@@ -123,6 +126,7 @@ export const AuthProvider = ({ children }) => {
             } else {
                 // User is fully logged out (not even anonymous)
                 setCurrentUser(null);
+                setCurrentUserHash(null);
                 setMemberNumber(null);
                 setLoading(false);
             }
@@ -133,6 +137,7 @@ export const AuthProvider = ({ children }) => {
 
     const value = {
         currentUser,
+        currentUserHash,
         memberNumber,
         loginWithGoogle,
         loginAnonymously,
