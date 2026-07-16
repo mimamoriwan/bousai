@@ -52,6 +52,7 @@ const WalkControllerSheet = ({ isOpen, onClose }) => {
     const { currentUser, currentUserHash } = useAuth();
 
     const handleAction = async (actionType, label) => {
+        if (!currentUser) return;
         if (!navigator.geolocation) {
             const { default: toast } = await import('react-hot-toast');
             toast.error('位置情報が取得できません。設定を確認してください。');
@@ -90,6 +91,7 @@ const WalkControllerSheet = ({ isOpen, onClose }) => {
                     savedBy: [],
                     visibility: 'public',
                     userHash: currentUserHash ?? null,
+                    ownerUid: currentUser.uid,
                 };
 
                 try {

@@ -16,26 +16,59 @@ export const useMapData = () => {
     const [userPosts, setUserPosts] = useState([]);
     const [safetyReports, setSafetyReports] = useState([]);
 
-    // map_pins のリアルタイムリスナー
+    const normalizePins = (snapshot) => snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            ...data,
+            visibility: data.visibility || 'public',
+            savedBy: Array.isArray(data.savedBy) ? data.savedBy : [],
+            thanks: Array.isArray(data.thanks) ? data.thanks : []
+        };
+    });
+
+    // 公開投稿と自分の非公開投稿だけを購読する
     useEffect(() => {
-        const q = query(collection(db, 'map_pins'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const pins = snapshot.docs.map((docSnap) => {
-                const data = docSnap.data();
-                return {
-                    id: docSnap.id,
-                    ...data,
-                    visibility: data.visibility || 'public',
-                    savedBy: Array.isArray(data.savedBy) ? data.savedBy : [],
-                    thanks: Array.isArray(data.thanks) ? data.thanks : []
-                };
-            });
-            setUserPosts(pins);
+        let publicPins = [];
+        let privatePins = [];
+        const syncPins = () => {
+            const merged = new Map(
+                [...publicPins, ...privatePins].map((pin) => [pin.id, pin])
+            );
+            setUserPosts([...merged.values()]);
+        };
+
+        const publicQuery = query(
+            collection(db, 'map_pins'),
+            where('visibility', '==', 'public')
+        );
+        const unsubscribePublic = onSnapshot(publicQuery, (snapshot) => {
+            publicPins = normalizePins(snapshot);
+            syncPins();
         }, (error) => {
-            console.error('map_pins 取得エラー:', error);
+            console.error('公開map_pins 取得エラー:', error);
         });
-        return () => unsubscribe();
-    }, []);
+
+        let unsubscribePrivate = () => {};
+        if (currentUser) {
+            const privateQuery = query(
+                collection(db, 'map_pins'),
+                where('ownerUid', '==', currentUser.uid),
+                where('visibility', '==', 'private')
+            );
+            unsubscribePrivate = onSnapshot(privateQuery, (snapshot) => {
+                privatePins = normalizePins(snapshot);
+                syncPins();
+            }, (error) => {
+                console.error('自分の非公開map_pins 取得エラー:', error);
+            });
+        }
+
+        return () => {
+            unsubscribePublic();
+            unsubscribePrivate();
+        };
+    }, [currentUser]);
 
     // safetyReports の過去6時間分をリアルタイムで取得
     useEffect(() => {
@@ -55,18 +88,22 @@ export const useMapData = () => {
     /** map_pins を手動で最新取得（プルトゥリフレッシュ用） */
     const fetchLatestPins = async () => {
         try {
-            const snapshot = await getDocs(query(collection(db, 'map_pins')));
-            const pins = snapshot.docs.map((docSnap) => {
-                const data = docSnap.data();
-                return {
-                    id: docSnap.id,
-                    ...data,
-                    visibility: data.visibility || 'public',
-                    savedBy: Array.isArray(data.savedBy) ? data.savedBy : [],
-                    thanks: Array.isArray(data.thanks) ? data.thanks : []
-                };
-            });
-            setUserPosts(pins);
+            const requests = [getDocs(query(
+                collection(db, 'map_pins'),
+                where('visibility', '==', 'public')
+            ))];
+            if (currentUser) {
+                requests.push(getDocs(query(
+                    collection(db, 'map_pins'),
+                    where('ownerUid', '==', currentUser.uid),
+                    where('visibility', '==', 'private')
+                )));
+            }
+            const snapshots = await Promise.all(requests);
+            const merged = new Map(
+                snapshots.flatMap(normalizePins).map((pin) => [pin.id, pin])
+            );
+            setUserPosts([...merged.values()]);
         } catch (error) {
             console.error('手動フェッチエラー:', error);
         }

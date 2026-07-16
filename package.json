@@ -10,6 +10,7 @@
     "build": "vite build",
     "build:local": "VITE_USE_FIREBASE_EMULATORS=true vite build --outDir dist-local",
     "emulators": "firebase emulators:start --config firebase.local.json --project demo-tsukuba-pet-bousai --only auth,firestore,storage",
+    "test:emulator": "node scripts/emulator-smoke.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

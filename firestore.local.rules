@@ -2,9 +2,148 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Local emulator only. Production rules remain managed separately.
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isGoogleUser() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function validCoordinates(data) {
+      return data.lat is number
+        && data.lng is number
+        && data.lat >= -90
+        && data.lat <= 90
+        && data.lng >= -180
+        && data.lng <= 180;
+    }
+
+    function validMapPinCreate() {
+      return request.resource.data.keys().hasOnly([
+          'lat', 'lng', 'type', 'title', 'note', 'date', 'timestamp',
+          'imageUrl', 'imagePath', 'resolved', 'thanks', 'savedBy',
+          'visibility', 'userHash', 'ownerUid'
+        ])
+        && request.resource.data.keys().hasAll([
+          'lat', 'lng', 'type', 'title', 'note', 'date', 'timestamp',
+          'resolved', 'thanks', 'savedBy', 'visibility', 'ownerUid'
+        ])
+        && request.resource.data.ownerUid == request.auth.uid
+        && validCoordinates(request.resource.data)
+        && request.resource.data.type is string
+        && request.resource.data.type.size() > 0
+        && request.resource.data.type.size() <= 50
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 100
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 500
+        && request.resource.data.date is string
+        && request.resource.data.date.size() <= 30
+        && request.resource.data.timestamp is int
+        && request.resource.data.resolved == false
+        && request.resource.data.thanks is list
+        && request.resource.data.thanks.size() == 0
+        && request.resource.data.savedBy is list
+        && request.resource.data.savedBy.size() == 0
+        && request.resource.data.visibility in ['public', 'private']
+        && (!request.resource.data.keys().hasAll(['imageUrl'])
+          || request.resource.data.imageUrl == null
+          || request.resource.data.imageUrl is string)
+        && (!request.resource.data.keys().hasAll(['imagePath'])
+          || request.resource.data.imagePath == null
+          || (request.resource.data.imagePath is string
+            && request.resource.data.imagePath.matches('map_pins/' + request.auth.uid + '/.*')))
+        && (!request.resource.data.keys().hasAll(['userHash'])
+          || request.resource.data.userHash == null
+          || request.resource.data.userHash is string);
+    }
+
+    function changesOnly(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    function validInteraction(field) {
+      return resource.data.visibility == 'public'
+        && request.resource.data[field] is list
+        && request.resource.data[field].size() <= 500
+        && (request.resource.data[field].size() == resource.data[field].size() + 1
+          || request.resource.data[field].size() + 1 == resource.data[field].size());
+    }
+
+    match /map_pins/{postId} {
+      allow read: if resource.data.visibility == 'public'
+        || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
+
+      allow create: if isSignedIn() && validMapPinCreate();
+
+      allow update: if isSignedIn() && (
+        (resource.data.ownerUid == request.auth.uid
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && changesOnly(['resolved'])
+          && request.resource.data.resolved is bool)
+        || (changesOnly(['thanks']) && validInteraction('thanks'))
+        || (isGoogleUser()
+          && changesOnly(['savedBy'])
+          && validInteraction('savedBy'))
+      );
+
+      allow delete: if isSignedIn()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /users/{uid} {
+      allow read, create, update: if isOwner(uid);
+      allow delete: if false;
+
+      match /routes/{routeId} {
+        allow read, create, update, delete: if isOwner(uid) && isGoogleUser();
+      }
+    }
+
+    match /metadata/counters {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && request.resource.data.keys().hasOnly(['memberCount'])
+        && request.resource.data.memberCount == 1;
+      allow update: if isGoogleUser()
+        && request.resource.data.keys().hasOnly(['memberCount'])
+        && request.resource.data.memberCount == resource.data.memberCount + 1;
+      allow delete: if false;
+    }
+
+    match /walkActions/{actionId} {
+      allow read, delete: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && validCoordinates(request.resource.data)
+        && request.resource.data.actionType is string
+        && request.resource.data.timestamp is int;
+      allow update: if false;
+    }
+
+    function ownsSafetyReport(data) {
+      return (data.keys().hasAll(['uid']) && data.uid == request.auth.uid)
+        || (data.keys().hasAll(['userId']) && data.userId == request.auth.uid);
+    }
+
+    match /safetyReports/{reportId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && ownsSafetyReport(request.resource.data);
+      allow delete: if isSignedIn() && ownsSafetyReport(resource.data);
+      allow update: if false;
+    }
+
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

@@ -233,7 +233,7 @@ const MapPage = () => {
     // ── 通常投稿フォームの送信 ──
     const handlePostSubmit = async (e) => {
         e.preventDefault();
-        if (!tempPost) return;
+        if (!tempPost || !currentUser) return;
         setIsSubmitting(true);
         try {
             let imageUrl = null;
@@ -242,7 +242,7 @@ const MapPage = () => {
                 const mimeTypeMatch = postForm.image.match(/data:(.*?);/);
                 const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
                 const ext = mimeType === 'image/webp' ? 'webp' : 'jpg';
-                const filename = `map_pins/${Date.now()}.${ext}`;
+                const filename = `map_pins/${currentUser.uid}/${Date.now()}.${ext}`;
                 const storageRef = ref(storage, filename);
                 await uploadString(storageRef, postForm.image, 'data_url');
                 imageUrl = await getDownloadURL(storageRef);
@@ -264,6 +264,7 @@ const MapPage = () => {
                 savedBy: [],
                 visibility: postForm.visibility || 'public',
                 userHash: currentUserHash ?? null,
+                ownerUid: currentUser.uid,
             });
 
             setTempPost(null);
@@ -286,6 +287,7 @@ const MapPage = () => {
     };
 
     const handleQuickPostSubmit = async (withPhoto = false, imageDataUrl = null) => {
+        if (!currentUser) return;
         setIsSubmitting(true);
         try {
             let lat, lng;
@@ -310,7 +312,7 @@ const MapPage = () => {
                 const mimeTypeMatch = finalImage.match(/data:(.*?);/);
                 const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
                 const ext = mimeType === 'image/webp' ? 'webp' : 'jpg';
-                const filename = `map_pins/${Date.now()}.${ext}`;
+                const filename = `map_pins/${currentUser.uid}/${Date.now()}.${ext}`;
                 const storageRef = ref(storage, filename);
                 await uploadString(storageRef, finalImage, 'data_url');
                 imageUrl = await getDownloadURL(storageRef);
@@ -331,6 +333,7 @@ const MapPage = () => {
                 savedBy: [],
                 visibility: 'public',
                 userHash: currentUserHash ?? null,
+                ownerUid: currentUser.uid,
             });
 
             setShowQuickPostSheet(false);
@@ -352,7 +355,10 @@ const MapPage = () => {
 
         if (activeMapLayer === 'myMap') {
             if (!currentUser) return false;
-            const isMine = Boolean(currentUserHash && post.userHash && post.userHash === currentUserHash);
+            const isMine = Boolean(
+                (currentUser && post.ownerUid === currentUser.uid)
+                || (currentUserHash && post.userHash && post.userHash === currentUserHash)
+            );
             const isSaved = Boolean(currentUserHash && post.savedBy?.includes(currentUserHash));
             if (!isMine && !isSaved) return false;
             if (filter !== 'all' && filter !== 'resolved') {
@@ -1145,6 +1151,9 @@ const MapPage = () => {
                                     {/* ユーザー投稿ピン */}
                                     {displayPosts.map(post => {
                                         const hasThanked = Boolean(currentUserHash && post.thanks?.includes(currentUserHash));
+                                        const isOwner = Boolean(
+                                            currentUser && post.ownerUid === currentUser.uid
+                                        );
                                         const timeLimit = (filter === 'plant' && post.type === 'plant') ? 14 * 24 * 60 * 60 * 1000 : 48 * 60 * 60 * 1000;
                                         const isOld = post.timestamp ? (Date.now() - post.timestamp > timeLimit) : false;
 
@@ -1208,7 +1217,7 @@ const MapPage = () => {
                                                         >
                                                             💖 {post.thanks?.length || 0}
                                                         </button>
-                                                        {!post.resolved && (
+                                                        {isOwner && !post.resolved && (
                                                             <button
                                                                 onClick={() => handleResolve(post.id)}
                                                                 style={{
@@ -1220,7 +1229,7 @@ const MapPage = () => {
                                                                 👍 解決済に
                                                             </button>
                                                         )}
-                                                        {(!currentUserHash || post.userHash !== currentUserHash) && (
+                                                        {!isOwner && (
                                                             <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
@@ -1239,14 +1248,14 @@ const MapPage = () => {
                                                             </button>
                                                         )}
                                                     </div>
-                                                    <div style={{ textAlign: 'right', marginTop: '8px' }}>
+                                                    {isOwner && <div style={{ textAlign: 'right', marginTop: '8px' }}>
                                                         <button
                                                             onClick={() => deletePost(post.id, post.imagePath)}
                                                             style={{ background: 'none', border: 'none', color: '#EF4444', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.75rem' }}
                                                         >
                                                             投稿を削除
                                                         </button>
-                                                    </div>
+                                                    </div>}
                                                 </Popup>
                                             </Marker>
                                         );
@@ -1326,6 +1335,9 @@ const MapPage = () => {
                             <div style={{ display: 'grid', gap: 'var(--spacing-sm)' }}>
                                 {[...displayPosts].sort((a, b) => b.timestamp - a.timestamp).map(post => {
                                     const hasThanked = Boolean(currentUserHash && post.thanks?.includes(currentUserHash));
+                                    const isOwner = Boolean(
+                                        currentUser && post.ownerUid === currentUser.uid
+                                    );
                                     const timeLimit = (filter === 'plant' && post.type === 'plant') ? 14 * 24 * 60 * 60 * 1000 : 48 * 60 * 60 * 1000;
                                     const isOld = post.timestamp ? (Date.now() - post.timestamp > timeLimit) : false;
                                     return (
@@ -1367,7 +1379,7 @@ const MapPage = () => {
                                                         {post.imageUrl && <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>📷 写真あり</span>}
                                                     </div>
                                                     <div style={{ display: 'flex', gap: '8px' }}>
-                                                        {(!currentUserHash || post.userHash !== currentUserHash) && (
+                                                        {!isOwner && (
                                                             <button
                                                                 onClick={(e) => { e.stopPropagation(); handleSavePost(post.id, post.savedBy); }}
                                                                 style={{

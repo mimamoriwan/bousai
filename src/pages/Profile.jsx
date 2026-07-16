@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import RouteEditor from '../components/RouteEditor';
 
 const Profile = () => {
-    const { currentUser, memberNumber, linkWithGoogle, loginWithGoogle, loginAnonymously, logout } = useAuth();
+    const { currentUser, linkWithGoogle, loginWithGoogle, loginAnonymously, logout } = useAuth();
 
     const [userPosts, setUserPosts] = useState([]);
     const [thanksCount, setThanksCount] = useState(0);
@@ -85,9 +85,9 @@ const Profile = () => {
 
     useEffect(() => {
         const fetchUserPosts = async () => {
-            if (currentUser && memberNumber) {
+            if (currentUser) {
                 try {
-                    const q = query(collection(db, 'map_pins'), where('memberNumber', '==', memberNumber));
+                    const q = query(collection(db, 'map_pins'), where('ownerUid', '==', currentUser.uid));
                     const querySnapshot = await getDocs(q);
                     const posts = [];
                     let totalThanks = 0;
@@ -107,7 +107,7 @@ const Profile = () => {
             }
         };
         fetchUserPosts();
-    }, [currentUser, memberNumber]);
+    }, [currentUser]);
     // MYルート一覧をリアルタイム購読
     useEffect(() => {
         if (!currentUser || currentUser.isAnonymous) return;
