@@ -16,6 +16,21 @@ import { getMarkerIcon, shelterIcon } from '../constants/mapIcons';
 import { useMapData } from '../hooks/useMapData';
 import WalkControllerSheet from '../components/map/WalkControllerSheet';
 
+const DEFAULT_LOCATION = [36.0834, 140.0766];
+
+const getLocationErrorMessage = (error) => {
+    if (!navigator.geolocation) {
+        return 'このブラウザは位置情報に対応していないため、つくば駅周辺を表示しています。';
+    }
+    if (error?.code === 1) {
+        return '位置情報が許可されていないため、つくば駅周辺を表示しています。ブラウザの位置情報設定をご確認ください。';
+    }
+    if (error?.code === 3) {
+        return '現在地の取得が時間切れになったため、つくば駅周辺を表示しています。';
+    }
+    return '現在地を取得できなかったため、つくば駅周辺を表示しています。';
+};
+
 // ─────────────────────────────────────────
 // LocationMarker: 現在地ピン（MapContainer 内で使用）
 // ─────────────────────────────────────────
@@ -139,35 +154,77 @@ const MapPage = () => {
     // 初期位置取得
     const [initialCenter, setInitialCenter] = useState(null);
     const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+    const [locationMessage, setLocationMessage] = useState('');
 
     useEffect(() => {
-        const DEFAULT_LOCATION = [36.0834, 140.0766];
         if (!navigator.geolocation) {
             setInitialCenter(DEFAULT_LOCATION);
+            setLocationMessage(getLocationErrorMessage());
             setIsLoadingLocation(false);
             return;
         }
-        const timeoutId = setTimeout(() => {
+
+        let settled = false;
+        const finishWithFallback = (error) => {
+            if (settled) return;
+            settled = true;
             setInitialCenter(DEFAULT_LOCATION);
+            setLocationMessage(getLocationErrorMessage(error));
             setIsLoadingLocation(false);
-        }, 5000);
+        };
+        const timeoutId = setTimeout(() => {
+            finishWithFallback({ code: 3 });
+        }, 6000);
 
         navigator.geolocation.getCurrentPosition(
             (pos) => {
+                if (settled) return;
+                settled = true;
                 clearTimeout(timeoutId);
                 setInitialCenter([pos.coords.latitude, pos.coords.longitude]);
+                setLocationMessage('');
                 setIsLoadingLocation(false);
             },
             (err) => {
                 clearTimeout(timeoutId);
                 console.warn(`Geolocation error (${err.code}): ${err.message}`);
-                setInitialCenter(DEFAULT_LOCATION);
-                setIsLoadingLocation(false);
+                finishWithFallback(err);
             },
             { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
         );
-        return () => clearTimeout(timeoutId);
+        return () => {
+            settled = true;
+            clearTimeout(timeoutId);
+        };
     }, []);
+
+    const moveToCurrentLocation = () => {
+        if (showQuickPostSheet) closeQuickPost();
+
+        if (!navigator.geolocation) {
+            setLocationMessage(getLocationErrorMessage());
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const center = [pos.coords.latitude, pos.coords.longitude];
+                setInitialCenter(center);
+                setLocationMessage('');
+                if (mapRef.current) {
+                    mapRef.current.setView(center, 16, { animate: true, duration: 0.5 });
+                    mapRef.current.fire('locationfound', {
+                        latlng: { lat: center[0], lng: center[1] }
+                    });
+                }
+            },
+            (error) => {
+                console.warn('現在地取得エラー:', error);
+                setLocationMessage(getLocationErrorMessage(error));
+            },
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        );
+    };
 
     const handleRefresh = async () => {
         await fetchLatestPins();
@@ -240,14 +297,10 @@ const MapPage = () => {
                 lng = pos.coords.longitude;
             } catch (err) {
                 console.warn('クイック投稿の位置取得失敗:', err);
-                if (initialCenter) {
-                    lat = initialCenter[0];
-                    lng = initialCenter[1];
-                } else {
-                    alert('現在地を取得できませんでした。');
-                    setIsSubmitting(false);
-                    return;
-                }
+                setLocationMessage(getLocationErrorMessage(err));
+                alert('現在地を取得できないため投稿を中止しました。「地図から選ぶ」も利用できます。');
+                setIsSubmitting(false);
+                return;
             }
 
             let imageUrl = null;
@@ -440,41 +493,38 @@ const MapPage = () => {
                                     </button>
                                 </div>
 
+                                {locationMessage && (
+                                    <div
+                                        role="status"
+                                        style={{
+                                            position: 'absolute', top: '70px', left: '12px', right: '12px',
+                                            zIndex: 1090, backgroundColor: 'rgba(255,255,255,0.96)',
+                                            border: '1px solid #FDBA74', borderRadius: '12px',
+                                            boxShadow: '0 3px 10px rgba(0,0,0,0.14)', padding: '9px 10px',
+                                            display: 'flex', alignItems: 'center', gap: '8px',
+                                            color: '#9A3412', fontSize: '0.75rem', lineHeight: 1.4,
+                                        }}
+                                    >
+                                        <span aria-hidden="true">📍</span>
+                                        <span style={{ flex: 1 }}>{locationMessage}</span>
+                                        <button
+                                            type="button"
+                                            onClick={moveToCurrentLocation}
+                                            style={{
+                                                flexShrink: 0, border: '1px solid #FB923C', borderRadius: '9px',
+                                                backgroundColor: '#FFF7ED', color: '#C2410C',
+                                                padding: '6px 8px', fontWeight: 'bold', cursor: 'pointer',
+                                            }}
+                                        >
+                                            再試行
+                                        </button>
+                                    </div>
+                                )}
+
                                 {/* 現在地へ戻る FAB */}
                                 <div style={{ position: 'absolute', bottom: 'calc(25vh + 100px)', right: '20px', zIndex: 1000 }}>
                                     <button
-                                        onClick={() => {
-                                            if (showQuickPostSheet) closeQuickPost();
-
-                                            const navigateToCenter = (lat, lng) => {
-                                                if (mapRef.current) {
-                                                    mapRef.current.setView([lat, lng], 16, { animate: true, duration: 0.5 });
-                                                    mapRef.current.fire('locationfound', { latlng: { lat, lng } });
-                                                }
-                                            };
-
-                                            if (!navigator.geolocation) {
-                                                if (initialCenter) navigateToCenter(initialCenter[0], initialCenter[1]);
-                                                else alert('お使いの端末・ブラウザでは現在地取得機能がサポートされていません。');
-                                                return;
-                                            }
-
-                                            navigator.geolocation.getCurrentPosition(
-                                                (pos) => navigateToCenter(pos.coords.latitude, pos.coords.longitude),
-                                                (error) => {
-                                                    console.warn('現在地取得エラー:', error);
-                                                    if (initialCenter) {
-                                                        navigateToCenter(initialCenter[0], initialCenter[1]);
-                                                    } else {
-                                                        let msg = '現在地を取得できませんでした。';
-                                                        if (error.code === 1) msg = '位置情報の利用が許可されていません。端末の設定をご確認ください。';
-                                                        if (error.code === 2 || error.code === 3) msg = '位置情報が取得できません。ブラウザの権限設定を確認してください。';
-                                                        alert(msg);
-                                                    }
-                                                },
-                                                { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
-                                            );
-                                        }}
+                                        onClick={moveToCurrentLocation}
                                         style={{
                                             backgroundColor: 'white',
                                             color: 'var(--color-primary)',
@@ -576,13 +626,14 @@ const MapPage = () => {
                                                             (pos) => setTempPost({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
                                                             (err) => {
                                                                 console.warn('Geolocation fallback:', err);
-                                                                if (initialCenter) setTempPost({ lat: initialCenter[0], lng: initialCenter[1] });
-                                                                else alert('現在地を取得できませんでした。');
+                                                                setLocationMessage(getLocationErrorMessage(err));
+                                                                alert('現在地を取得できませんでした。「地図から選ぶ」をご利用ください。');
                                                             },
                                                             { enableHighAccuracy: true, timeout: 5000 }
                                                         );
-                                                    } else if (initialCenter) {
-                                                        setTempPost({ lat: initialCenter[0], lng: initialCenter[1] });
+                                                    } else {
+                                                        setLocationMessage(getLocationErrorMessage());
+                                                        alert('現在地を取得できませんでした。「地図から選ぶ」をご利用ください。');
                                                     }
                                                 }}
                                                 style={{
