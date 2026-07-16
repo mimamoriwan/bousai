@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithRedirect, signOut, signInAnonymously, linkWithRedirect, getRedirectResult, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, runTransaction } from 'firebase/firestore';
 import { auth, provider, db } from '../firebase';
@@ -15,8 +15,6 @@ export const AuthProvider = ({ children }) => {
     const [currentUserHash, setCurrentUserHash] = useState(null);
     const [memberNumber, setMemberNumber] = useState(null);
     const [loading, setLoading] = useState(true);
-    const hasInitialized = useRef(false);
-
     const loginWithGoogle = async () => {
         try {
             await signInWithRedirect(auth, provider);
@@ -151,4 +149,3 @@ export const AuthProvider = ({ children }) => {
         </AuthContext.Provider>
     );
 };
-

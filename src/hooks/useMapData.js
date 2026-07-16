@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, storage } from '../firebase';
 import {
-    collection, addDoc, deleteDoc, doc, onSnapshot, query,
+    collection, deleteDoc, doc, onSnapshot, query,
     updateDoc, arrayUnion, arrayRemove, getDocs, where, Timestamp
 } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';

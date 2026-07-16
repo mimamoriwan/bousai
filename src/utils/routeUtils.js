@@ -52,7 +52,6 @@ export function applyPrivacyFilter(points, trimMeters = 150) {
     }
 
     // ── 始点側を trimMeters 分スキップ ──────────────────────────────────
-    let startIdx = 0;
     let accumulated = 0;
     for (let i = 1; i < points.length; i++) {
         const seg = haversineDistance(points[i - 1], points[i]);
@@ -88,7 +87,6 @@ export function applyPrivacyFilter(points, trimMeters = 150) {
             return { publicPath: finalPath, totalDistanceM, tooShort: false };
         }
         accumulated += seg;
-        startIdx = i;
     }
 
     // フォールバック（通常ここには来ない）

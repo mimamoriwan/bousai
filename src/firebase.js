@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
+import { connectAuthEmulator, getAuth, GoogleAuthProvider } from "firebase/auth";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -25,3 +25,12 @@ export const storage = getStorage(app);
 // Initialize Firebase Authentication and get a reference to the service
 export const auth = getAuth(app);
 export const provider = new GoogleAuthProvider();
+
+const useFirebaseEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
+
+if (useFirebaseEmulators && !globalThis.__MIMAMORI_FIREBASE_EMULATORS_CONNECTED__) {
+    connectAuthEmulator(auth, 'http://127.0.0.1:9106', { disableWarnings: true });
+    connectFirestoreEmulator(db, '127.0.0.1', 8086);
+    connectStorageEmulator(storage, '127.0.0.1', 9206);
+    globalThis.__MIMAMORI_FIREBASE_EMULATORS_CONNECTED__ = true;
+}

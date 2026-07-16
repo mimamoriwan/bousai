@@ -173,10 +173,6 @@ const MapPage = () => {
         await fetchLatestPins();
     };
 
-    const handleMapClick = (latlng) => {
-        setTempPost(latlng);
-    };
-
     // ── 通常投稿フォームの送信 ──
     const handlePostSubmit = async (e) => {
         e.preventDefault();
