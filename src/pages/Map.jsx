@@ -127,6 +127,7 @@ const MapPage = () => {
 
     const [isSelectingLocation, setIsSelectingLocation] = useState(false);
     const [isSelectingSafetyLocation, setIsSelectingSafetyLocation] = useState(false);
+    const [pendingWalkAction, setPendingWalkAction] = useState(null);
     const [showPostOptions, setShowPostOptions] = useState(false);
     const [tempPost, setTempPost] = useState(null);
     const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null, visibility: 'public' });
@@ -148,7 +149,9 @@ const MapPage = () => {
 
     // スポット安全報告ローディング
     const [isSpotReporting, setIsSpotReporting] = useState(false);
-    const isSelectingAnyLocation = isSelectingLocation || isSelectingSafetyLocation;
+    const [isWalkActionSaving, setIsWalkActionSaving] = useState(false);
+    const isSelectingWalkLocation = Boolean(pendingWalkAction);
+    const isSelectingAnyLocation = isSelectingLocation || isSelectingSafetyLocation || isSelectingWalkLocation;
 
     const { currentUser, currentUserHash, memberNumber } = useAuth();
 
@@ -403,6 +406,46 @@ const MapPage = () => {
             );
         } finally {
             setIsSpotReporting(false);
+        }
+    };
+
+    const startWalkLocationSelection = ({ actionType, label, locationError }) => {
+        setShowPostOptions(false);
+        setShowQuickPostSheet(false);
+        setIsSelectingLocation(false);
+        setIsSelectingSafetyLocation(false);
+        setPendingWalkAction({ actionType, label });
+        setLocationMessage(getLocationErrorMessage(locationError));
+    };
+
+    const handleSelectedWalkAction = async () => {
+        if (!mapRef.current || !currentUser || !pendingWalkAction || isWalkActionSaving) return;
+        const center = mapRef.current.getCenter();
+        setIsWalkActionSaving(true);
+        try {
+            await addDoc(collection(db, 'walkActions'), {
+                uid: currentUser.uid,
+                actionType: pendingWalkAction.actionType,
+                lat: center.lat,
+                lng: center.lng,
+                timestamp: Date.now(),
+                createdAt: serverTimestamp(),
+            });
+            const completedLabel = pendingWalkAction.label;
+            setPendingWalkAction(null);
+            setActiveMapLayer('myMap');
+            setDisplayMode('alert');
+            setFilter('walk');
+            import('react-hot-toast').then(({ default: toast }) => {
+                toast.success(`${completedLabel}を記録しました🐾`, { duration: 2500, icon: '📍' });
+            });
+        } catch (error) {
+            console.error('選択したお散歩アクションの保存エラー:', error);
+            import('react-hot-toast').then(({ default: toast }) => {
+                toast.error('記録の保存に失敗しました。場所を確認してもう一度お試しください。');
+            });
+        } finally {
+            setIsWalkActionSaving(false);
         }
     };
 
@@ -1003,7 +1046,11 @@ const MapPage = () => {
                                     filter: 'drop-shadow(0px 4px 4px rgba(0,0,0,0.3))'
                                 }}>
                                     <div style={{ fontSize: '3rem', lineHeight: '1' }}>
-                                        {isSelectingSafetyLocation ? '🟢' : '📍'}
+                                        {isSelectingSafetyLocation
+                                            ? '🟢'
+                                            : isSelectingWalkLocation
+                                                ? (WALK_ACTION_META[pendingWalkAction.actionType]?.emoji || '🐾')
+                                                : '📍'}
                                     </div>
                                 </div>
                                 <div style={{
@@ -1016,7 +1063,12 @@ const MapPage = () => {
                                     <button
                                         className="btn card"
                                         style={{
-                                            backgroundColor: isSelectingSafetyLocation ? '#16A34A' : 'var(--color-primary)', color: 'white',
+                                            backgroundColor: isSelectingSafetyLocation
+                                                ? '#16A34A'
+                                                : isSelectingWalkLocation
+                                                    ? '#BE185D'
+                                                    : 'var(--color-primary)',
+                                            color: 'white',
                                             fontWeight: 'bold', fontSize: '1.1rem', padding: '16px',
                                             borderRadius: '9999px', margin: 0, textAlign: 'center',
                                             border: 'none', boxShadow: '0 4px 12px rgba(249, 115, 22, 0.4)'
@@ -1024,27 +1076,33 @@ const MapPage = () => {
                                         onClick={async () => {
                                             if (isSelectingSafetyLocation) {
                                                 await handleSelectedSpotSafetyReport();
+                                            } else if (isSelectingWalkLocation) {
+                                                await handleSelectedWalkAction();
                                             } else if (mapRef.current) {
                                                 const center = mapRef.current.getCenter();
                                                 setTempPost({ lat: center.lat, lng: center.lng });
                                             }
                                         }}
-                                        disabled={isSpotReporting}
+                                        disabled={isSpotReporting || isWalkActionSaving}
                                     >
-                                        {isSpotReporting
+                                        {isSpotReporting || isWalkActionSaving
                                             ? '報告中...'
                                             : isSelectingSafetyLocation
                                                 ? '🟢 この場所を安全と報告'
+                                                : isSelectingWalkLocation
+                                                    ? `${WALK_ACTION_META[pendingWalkAction.actionType]?.emoji || '🐾'} この場所で${pendingWalkAction.label}を記録`
                                                 : '📍 ここで決定'}
                                     </button>
-                                    {isSelectingSafetyLocation && (
+                                    {(isSelectingSafetyLocation || isSelectingWalkLocation) && (
                                         <div style={{
                                             backgroundColor: 'rgba(255,255,255,0.95)', color: '#4B5563',
                                             fontSize: '0.78rem', lineHeight: 1.5, textAlign: 'center',
                                             padding: '8px 12px', borderRadius: '12px',
                                             boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
                                         }}>
-                                            🔒 公開位置は約100m単位にぼかして保存します
+                                            {isSelectingSafetyLocation
+                                                ? '🔒 公開位置は約100m単位にぼかして保存します'
+                                                : '🔒 この正確な場所は、あなたのお散歩ノートだけに保存します'}
                                         </div>
                                     )}
                                     <button
@@ -1058,6 +1116,7 @@ const MapPage = () => {
                                         onClick={() => {
                                             setIsSelectingLocation(false);
                                             setIsSelectingSafetyLocation(false);
+                                            setPendingWalkAction(null);
                                         }}
                                     >
                                         キャンセル
@@ -1825,6 +1884,7 @@ const MapPage = () => {
             <WalkControllerSheet
                 isOpen={isWalkRecording}
                 onClose={() => setIsWalkRecording(false)}
+                onRequestMapSelection={startWalkLocationSelection}
                 memberNumber={memberNumber}
             />
         </div>

@@ -61,7 +61,7 @@ const getLocationFailureMessage = (error) => {
  * ボタンを押すと、正確な位置を本人だけが読める `walkActions` に保存する。
  * 公開マップでは、将来このデータを集約・匿名化した情報だけを表示する。
  */
-const WalkControllerSheet = ({ isOpen, onClose }) => {
+const WalkControllerSheet = ({ isOpen, onClose, onRequestMapSelection }) => {
     const { currentUser } = useAuth();
     const [recordingActionType, setRecordingActionType] = useState(null);
 
@@ -96,7 +96,13 @@ const WalkControllerSheet = ({ isOpen, onClose }) => {
         } catch (err) {
             if (err?.code === 1 || err?.code === 2 || err?.code === 3 || !navigator.geolocation) {
                 console.warn('位置情報取得エラー:', err);
-                toast.error(getLocationFailureMessage(err));
+                if (onRequestMapSelection) {
+                    toast('現在地を取得できないため、地図から記録場所を選んでください。', { icon: '🗺️' });
+                    onClose();
+                    onRequestMapSelection({ actionType, label, locationError: err });
+                } else {
+                    toast.error(getLocationFailureMessage(err));
+                }
             } else {
                 console.error('お散歩アクション保存エラー:', err);
                 toast.error('記録の保存に失敗しました。もう一度お試しください。');
