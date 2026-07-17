@@ -5,6 +5,17 @@ import { auth, provider, db } from '../firebase';
 import { hashUid } from '../utils/hashUtils';
 
 const AuthContext = createContext();
+let anonymousSignInPromise = null;
+
+const ensureAnonymousSession = () => {
+    if (!anonymousSignInPromise) {
+        anonymousSignInPromise = signInAnonymously(auth)
+            .finally(() => {
+                anonymousSignInPromise = null;
+            });
+    }
+    return anonymousSignInPromise;
+};
 
 export const useAuth = () => {
     return useContext(AuthContext);
@@ -26,7 +37,7 @@ export const AuthProvider = ({ children }) => {
 
     const loginAnonymously = async () => {
         try {
-            await signInAnonymously(auth);
+            await ensureAnonymousSession();
         } catch (error) {
             console.error('Error signing in anonymously:', error);
             throw error;
@@ -122,11 +133,17 @@ export const AuthProvider = ({ children }) => {
 
                 setLoading(false);
             } else {
-                // User is fully logged out (not even anonymous)
+                // 初回アクセスやログアウト後は、登録を求めずゲストとして開始する
                 setCurrentUser(null);
                 setCurrentUserHash(null);
                 setMemberNumber(null);
-                setLoading(false);
+                try {
+                    await ensureAnonymousSession();
+                } catch (error) {
+                    console.error('Failed to start guest session:', error);
+                    // 自動開始に失敗した場合だけ、手動開始画面を表示する
+                    setLoading(false);
+                }
             }
         });
 
