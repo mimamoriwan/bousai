@@ -286,6 +286,30 @@ const MapPage = () => {
         setPostForm(prev => ({ ...prev, image: null }));
     };
 
+    const startMapLocationSelection = ({ quickPost = null, image = null, locationError, notifyLocationFailure = false } = {}) => {
+        setShowPostOptions(false);
+        setShowQuickPostSheet(false);
+        setQuickPostStep(1);
+        if (quickPost) {
+            setPostForm(prev => ({
+                ...prev,
+                type: quickPost.type,
+                title: quickPost.title,
+                note: '',
+                image,
+                visibility: 'public',
+            }));
+        }
+        setIsSelectingLocation(true);
+
+        if (notifyLocationFailure) {
+            setLocationMessage(getLocationErrorMessage(locationError));
+            import('react-hot-toast').then(({ default: toast }) => {
+                toast('現在地を取得できないため、地図から投稿場所を選んでください。', { icon: '🗺️' });
+            });
+        }
+    };
+
     const handleQuickPostSubmit = async (withPhoto = false, imageDataUrl = null) => {
         if (!currentUser) return;
         setIsSubmitting(true);
@@ -299,9 +323,12 @@ const MapPage = () => {
                 lng = pos.coords.longitude;
             } catch (err) {
                 console.warn('クイック投稿の位置取得失敗:', err);
-                setLocationMessage(getLocationErrorMessage(err));
-                alert('現在地を取得できないため投稿を中止しました。「地図から選ぶ」も利用できます。');
-                setIsSubmitting(false);
+                startMapLocationSelection({
+                    quickPost: quickPostData,
+                    image: withPhoto ? (imageDataUrl || postForm.image) : null,
+                    locationError: err,
+                    notifyLocationFailure: true,
+                });
                 return;
             }
 
@@ -632,14 +659,12 @@ const MapPage = () => {
                                                             (pos) => setTempPost({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
                                                             (err) => {
                                                                 console.warn('Geolocation fallback:', err);
-                                                                setLocationMessage(getLocationErrorMessage(err));
-                                                                alert('現在地を取得できませんでした。「地図から選ぶ」をご利用ください。');
+                                                                startMapLocationSelection({ locationError: err, notifyLocationFailure: true });
                                                             },
                                                             { enableHighAccuracy: true, timeout: 5000 }
                                                         );
                                                     } else {
-                                                        setLocationMessage(getLocationErrorMessage());
-                                                        alert('現在地を取得できませんでした。「地図から選ぶ」をご利用ください。');
+                                                        startMapLocationSelection({ notifyLocationFailure: true });
                                                     }
                                                 }}
                                                 style={{
@@ -658,7 +683,7 @@ const MapPage = () => {
 
                                             {/* 🗺️ 地図から選ぶ */}
                                             <button
-                                                onClick={() => { setShowPostOptions(false); setIsSelectingLocation(true); }}
+                                                onClick={() => startMapLocationSelection()}
                                                 style={{
                                                     padding: '10px 8px', borderRadius: '12px',
                                                     backgroundColor: '#F3F4F6', color: '#1F2937',
@@ -1496,6 +1521,19 @@ const MapPage = () => {
                                 }}
                             >
                                 {isSubmitting ? '送信中...' : '🚀 このまま投稿する'}
+                            </button>
+
+                            <button
+                                onClick={() => startMapLocationSelection({ quickPost: quickPostData })}
+                                disabled={isSubmitting}
+                                style={{
+                                    width: '100%', padding: '16px', borderRadius: '16px',
+                                    border: '1px solid #FDBA74', backgroundColor: '#FFF7ED', color: '#C2410C',
+                                    fontSize: '1.05rem', fontWeight: 'bold', cursor: 'pointer',
+                                    opacity: isSubmitting ? 0.7 : 1
+                                }}
+                            >
+                                🗺️ 地図から投稿場所を選ぶ
                             </button>
 
                             <div style={{ position: 'relative', margin: '16px 0', borderTop: '2px dashed #E5E7EB' }}></div>
