@@ -88,6 +88,7 @@ const mapPinData = (uid, visibility) => ({
 let publicPinRef;
 let privatePinRef;
 let walkActionRef;
+let invalidWalkActionRef;
 let imageRef;
 
 try {
@@ -149,9 +150,27 @@ try {
         timestamp: Date.now(),
         createdAt: serverTimestamp(),
     });
+    const savedWalkAction = await getDoc(walkActionRef);
+    if (!savedWalkAction.exists()) throw new Error('本人のお散歩記録を読み取れませんでした。');
+    console.log('✓ ゲストのお散歩記録作成と本人読み取り');
+    await assertRejected('他人によるお散歩記録読み取りを拒否', () =>
+        getDoc(doc(attacker.db, 'walkActions', walkActionRef.id))
+    );
     await assertRejected('他人のお散歩記録削除を拒否', () =>
         deleteDoc(doc(attacker.db, 'walkActions', walkActionRef.id))
     );
+    invalidWalkActionRef = doc(owner.db, 'walkActions', `invalid-${suffix}`);
+    await assertRejected('未対応のお散歩アクション作成を拒否', () =>
+        setDoc(invalidWalkActionRef, {
+            uid: ownerUid,
+            actionType: 'unknown',
+            lat: 35.6722,
+            lng: 139.7364,
+            timestamp: Date.now(),
+            createdAt: serverTimestamp(),
+        })
+    );
+    invalidWalkActionRef = null;
 
     const onePixelPng = Uint8Array.from(Buffer.from(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z6C8AAAAASUVORK5CYII=',
@@ -173,6 +192,7 @@ try {
     console.log('\nFirebase Emulatorの権限テストはすべて成功しました。');
 } finally {
     if (imageRef) await deleteObject(imageRef).catch(() => {});
+    if (invalidWalkActionRef) await deleteDoc(invalidWalkActionRef).catch(() => {});
     if (walkActionRef) await deleteDoc(walkActionRef).catch(() => {});
     if (privatePinRef) await deleteDoc(privatePinRef).catch(() => {});
     if (publicPinRef) await deleteDoc(publicPinRef).catch(() => {});

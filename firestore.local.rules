@@ -122,10 +122,17 @@ service cloud.firestore {
       allow read, delete: if isSignedIn()
         && resource.data.uid == request.auth.uid;
       allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly([
+          'uid', 'actionType', 'lat', 'lng', 'timestamp', 'createdAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'uid', 'actionType', 'lat', 'lng', 'timestamp', 'createdAt'
+        ])
         && request.resource.data.uid == request.auth.uid
         && validCoordinates(request.resource.data)
-        && request.resource.data.actionType is string
-        && request.resource.data.timestamp is int;
+        && request.resource.data.actionType in ['sniff', 'pee', 'poop', 'mark']
+        && request.resource.data.timestamp is int
+        && request.resource.data.createdAt is timestamp;
       allow update: if false;
     }
 
