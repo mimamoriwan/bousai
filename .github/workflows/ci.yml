@@ -32,7 +32,9 @@ jobs:
           java-version: 21
 
       - name: Install dependencies
-        run: npm ci
+        # react-spring-bottom-sheet 3.x supports React through 18 in its peer
+        # metadata, while this recovered app already runs on React 19.
+        run: npm ci --legacy-peer-deps
 
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@14.11.0
