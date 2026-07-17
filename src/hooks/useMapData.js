@@ -15,6 +15,10 @@ export const useMapData = () => {
     const { currentUser, currentUserHash } = useAuth();
     const [userPosts, setUserPosts] = useState([]);
     const [safetyReports, setSafetyReports] = useState([]);
+    const [walkActionSnapshot, setWalkActionSnapshot] = useState({ uid: null, items: [] });
+    const walkActions = currentUser && walkActionSnapshot.uid === currentUser.uid
+        ? walkActionSnapshot.items
+        : [];
 
     const normalizePins = (snapshot) => snapshot.docs.map((docSnap) => {
         const data = docSnap.data();
@@ -70,6 +74,29 @@ export const useMapData = () => {
         };
     }, [currentUser]);
 
+    // 正確な位置を含むお散歩アクションは、本人の記録だけを購読する
+    useEffect(() => {
+        if (!currentUser) return undefined;
+
+        const ownActionsQuery = query(
+            collection(db, 'walkActions'),
+            where('uid', '==', currentUser.uid)
+        );
+        const unsubscribe = onSnapshot(ownActionsQuery, (snapshot) => {
+            setWalkActionSnapshot({
+                uid: currentUser.uid,
+                items: snapshot.docs.map((docSnap) => ({
+                    id: docSnap.id,
+                    ...docSnap.data(),
+                })),
+            });
+        }, (error) => {
+            console.error('自分のお散歩記録取得エラー:', error);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
+
     // safetyReports の過去6時間分をリアルタイムで取得
     useEffect(() => {
         const SIX_HOURS_AGO = Timestamp.fromMillis(Date.now() - 6 * 60 * 60 * 1000);
@@ -85,25 +112,42 @@ export const useMapData = () => {
         return () => unsubscribe();
     }, []);
 
-    /** map_pins を手動で最新取得（プルトゥリフレッシュ用） */
+    /** map_pins と自分のお散歩記録を手動で最新取得（プルトゥリフレッシュ用） */
     const fetchLatestPins = async () => {
         try {
-            const requests = [getDocs(query(
+            const pinRequests = [getDocs(query(
                 collection(db, 'map_pins'),
                 where('visibility', '==', 'public')
             ))];
             if (currentUser) {
-                requests.push(getDocs(query(
+                pinRequests.push(getDocs(query(
                     collection(db, 'map_pins'),
                     where('ownerUid', '==', currentUser.uid),
                     where('visibility', '==', 'private')
                 )));
             }
-            const snapshots = await Promise.all(requests);
+            const [snapshots, walkSnapshot] = await Promise.all([
+                Promise.all(pinRequests),
+                currentUser
+                    ? getDocs(query(
+                        collection(db, 'walkActions'),
+                        where('uid', '==', currentUser.uid)
+                    ))
+                    : Promise.resolve(null),
+            ]);
             const merged = new Map(
                 snapshots.flatMap(normalizePins).map((pin) => [pin.id, pin])
             );
             setUserPosts([...merged.values()]);
+            if (walkSnapshot) {
+                setWalkActionSnapshot({
+                    uid: currentUser.uid,
+                    items: walkSnapshot.docs.map((docSnap) => ({
+                        id: docSnap.id,
+                        ...docSnap.data(),
+                    })),
+                });
+            }
         } catch (error) {
             console.error('手動フェッチエラー:', error);
         }
@@ -175,13 +219,26 @@ export const useMapData = () => {
         }
     };
 
+    /** 本人のお散歩アクションを削除 */
+    const deleteWalkAction = async (id) => {
+        if (!window.confirm('このお散歩記録を削除しますか？')) return;
+        try {
+            await deleteDoc(doc(db, 'walkActions', id));
+        } catch (error) {
+            console.error('お散歩記録削除エラー:', error);
+            alert('お散歩記録の削除に失敗しました。');
+        }
+    };
+
     return {
         userPosts,
         safetyReports,
+        walkActions,
         fetchLatestPins,
         handleThanks,
         handleSavePost,
         handleResolve,
         deletePost,
+        deleteWalkAction,
     };
 };

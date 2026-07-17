@@ -18,6 +18,12 @@ import WalkControllerSheet from '../components/map/WalkControllerSheet';
 
 const DEFAULT_LOCATION = [36.0834, 140.0766];
 const toPublicSafetyCoordinate = (value) => Math.round(value * 1000) / 1000;
+const WALK_ACTION_META = {
+    sniff: { label: 'くん活', emoji: '🐕' },
+    pee: { label: 'おしっこ', emoji: '💧' },
+    poop: { label: 'うんち', emoji: '💩' },
+    mark: { label: 'マーキング', emoji: '📍' },
+};
 
 const getLocationErrorMessage = (error) => {
     if (!navigator.geolocation) {
@@ -105,11 +111,13 @@ const MapPage = () => {
     const {
         userPosts,
         safetyReports,
+        walkActions,
         fetchLatestPins,
         handleThanks,
         handleSavePost,
         handleResolve,
         deletePost,
+        deleteWalkAction,
     } = useMapData();
 
     // ── UI 状態 ──
@@ -146,6 +154,7 @@ const MapPage = () => {
 
     const mapRef = useRef(null);
     const markerRefs = useRef(new Map());
+    const walkMarkerRefs = useRef(new Map());
     const [activePostId, setActivePostId] = useState(null);
     const [isMinTimeElapsed, setIsMinTimeElapsed] = useState(false);
 
@@ -501,6 +510,11 @@ const MapPage = () => {
         }
     });
 
+    const displayWalkActions = activeMapLayer === 'myMap'
+        && (filter === 'all' || filter === 'walk')
+        ? walkActions
+        : [];
+
     const handleListPostClick = (post) => {
         const map = mapRef.current;
         if (map) {
@@ -521,6 +535,15 @@ const MapPage = () => {
                 setActivePostId(post.id);
             }
         }
+    };
+
+    const handleWalkActionClick = (action) => {
+        const map = mapRef.current;
+        if (map) {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            map.flyTo([action.lat, action.lng], 17, { animate: true, duration: 0.5 });
+        }
+        walkMarkerRefs.current.get(action.id)?.openPopup();
     };
 
     // ─────────────────────────────────────────
@@ -894,11 +917,13 @@ const MapPage = () => {
                                                 >🌍 みんなのマップ</button>
                                                 <button
                                                     onClick={() => {
-                                                        if (!currentUser || currentUser.isAnonymous) {
-                                                            alert('自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）');
+                                                        if (!currentUser) {
+                                                            alert('ゲスト情報を準備中です。少し待ってからもう一度お試しください。');
                                                             return;
                                                         }
                                                         setActiveMapLayer('myMap');
+                                                        setDisplayMode('alert');
+                                                        setFilter('all');
                                                     }}
                                                     style={{
                                                         flex: 1, padding: '7px 4px', borderRadius: '5px', border: 'none',
@@ -911,6 +936,16 @@ const MapPage = () => {
                                                     }}
                                                 >🗺️ マイマップ</button>
                                             </div>
+
+                                            {activeMapLayer === 'myMap' && currentUser?.isAnonymous && (
+                                                <div style={{
+                                                    marginBottom: '6px', padding: '7px 9px', borderRadius: '8px',
+                                                    backgroundColor: '#FFF7ED', color: '#9A3412',
+                                                    fontSize: '0.7rem', lineHeight: 1.45,
+                                                }}>
+                                                    🐾 ゲスト記録はこの端末で確認できます。Google連携すると機種変更後も引き継げます。
+                                                </div>
+                                            )}
 
                                             {activeMapLayer === 'public' && (
                                                 <button
@@ -1370,6 +1405,49 @@ const MapPage = () => {
                                     })}
                                 </>
                             )}
+
+                            {/* 本人だけに見える正確なお散歩アクション */}
+                            {displayWalkActions.map((action) => {
+                                const actionMeta = WALK_ACTION_META[action.actionType] || {
+                                    label: 'お散歩記録',
+                                    emoji: '🐾',
+                                };
+                                return (
+                                    <Marker
+                                        key={`walk-action-${action.id}`}
+                                        position={[action.lat, action.lng]}
+                                        icon={getMarkerIcon({ type: `walk_${action.actionType}` })}
+                                        ref={(ref) => {
+                                            if (ref) walkMarkerRefs.current.set(action.id, ref);
+                                            else walkMarkerRefs.current.delete(action.id);
+                                        }}
+                                    >
+                                        <Popup>
+                                            <div style={{ minWidth: '150px' }}>
+                                                <strong style={{ fontSize: '1rem' }}>
+                                                    {actionMeta.emoji} {actionMeta.label}
+                                                </strong>
+                                                <div style={{ marginTop: '5px', color: '#6B7280', fontSize: '0.78rem' }}>
+                                                    {getRelativeTime(action.timestamp)}
+                                                </div>
+                                                <div style={{ marginTop: '8px', color: '#047857', fontSize: '0.72rem' }}>
+                                                    🔒 この正確な場所は自分だけに表示されています
+                                                </div>
+                                                <button
+                                                    onClick={() => deleteWalkAction(action.id)}
+                                                    style={{
+                                                        marginTop: '10px', padding: 0, background: 'none',
+                                                        border: 'none', color: '#EF4444', cursor: 'pointer',
+                                                        fontSize: '0.72rem', textDecoration: 'underline',
+                                                    }}
+                                                >
+                                                    この記録を削除
+                                                </button>
+                                            </div>
+                                        </Popup>
+                                    </Marker>
+                                );
+                            })}
                         </MapContainer>
                     </>
                 )}
@@ -1408,7 +1486,9 @@ const MapPage = () => {
                 header={
                     <div style={{ padding: '8px 16px 0 16px', maxWidth: '100vw', boxSizing: 'border-box' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.2rem' }}>地域の最新情報</h3>
+                            <h3 style={{ margin: 0, fontSize: '1.2rem' }}>
+                                {activeMapLayer === 'myMap' ? '私だけのお散歩ノート' : '地域の最新情報'}
+                            </h3>
                             <button
                                 onClick={handleRefresh}
                                 style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', color: 'var(--color-text-sub)' }}
@@ -1417,6 +1497,15 @@ const MapPage = () => {
                                 🔄
                             </button>
                         </div>
+                        {activeMapLayer === 'myMap' && (
+                            <div style={{
+                                margin: '-8px 0 12px', padding: '8px 10px', borderRadius: '10px',
+                                backgroundColor: '#ECFDF5', color: '#047857',
+                                fontSize: '0.75rem', lineHeight: 1.5,
+                            }}>
+                                🔒 お散歩アクションの正確な場所は、あなたにだけ表示されます。
+                            </div>
+                        )}
                         <div
                             className="map-top-filters"
                             data-rsbs-no-pan="true"
@@ -1439,8 +1528,61 @@ const MapPage = () => {
             >
                 <div style={{ padding: '0 var(--spacing-md)', paddingBottom: '120px' }}>
                     <PullToRefresh onRefresh={handleRefresh} pullingContent="" refreshingContent={<div style={{ textAlign: 'center', padding: '10px', color: 'var(--color-text-sub)' }}>更新中...</div>}>
-                        {displayPosts.length > 0 ? (
+                        {(displayPosts.length > 0 || displayWalkActions.length > 0) ? (
                             <div style={{ display: 'grid', gap: 'var(--spacing-sm)' }}>
+                                {[...displayWalkActions]
+                                    .sort((a, b) => {
+                                        const bTime = b.timestamp?.toMillis?.() ?? b.timestamp ?? 0;
+                                        const aTime = a.timestamp?.toMillis?.() ?? a.timestamp ?? 0;
+                                        return bTime - aTime;
+                                    })
+                                    .map((action) => {
+                                        const actionMeta = WALK_ACTION_META[action.actionType] || {
+                                            label: 'お散歩記録',
+                                            emoji: '🐾',
+                                        };
+                                        return (
+                                            <div
+                                                key={`walk-list-${action.id}`}
+                                                className="card"
+                                                onClick={() => handleWalkActionClick(action)}
+                                                style={{
+                                                    padding: 'var(--spacing-sm) var(--spacing-md)', margin: 0,
+                                                    cursor: 'pointer', backgroundColor: '#F0FDF4',
+                                                    borderLeft: '4px solid #10B981',
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                                                    <div>
+                                                        <div style={{ fontWeight: 'bold', color: '#065F46' }}>
+                                                            {actionMeta.emoji} {actionMeta.label}
+                                                        </div>
+                                                        <div style={{ marginTop: '5px', fontSize: '0.72rem', color: '#047857' }}>
+                                                            🔒 正確な場所は自分だけに表示
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                                        <div style={{ fontSize: '0.75rem', color: '#6B7280', fontWeight: 'bold' }}>
+                                                            {getRelativeTime(action.timestamp)}
+                                                        </div>
+                                                        <button
+                                                            onClick={(event) => {
+                                                                event.stopPropagation();
+                                                                deleteWalkAction(action.id);
+                                                            }}
+                                                            style={{
+                                                                marginTop: '7px', padding: 0, background: 'none', border: 'none',
+                                                                color: '#EF4444', cursor: 'pointer', fontSize: '0.68rem',
+                                                                textDecoration: 'underline',
+                                                            }}
+                                                        >
+                                                            削除
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 {[...displayPosts].sort((a, b) => b.timestamp - a.timestamp).map(post => {
                                     const hasThanked = Boolean(currentUserHash && post.thanks?.includes(currentUserHash));
                                     const isOwner = Boolean(
@@ -1524,7 +1666,9 @@ const MapPage = () => {
                             </div>
                         ) : (
                             <p style={{ color: 'var(--color-text-sub)', textAlign: 'center', padding: 'var(--spacing-lg) 0' }}>
-                                周辺の投稿はまだありません。
+                                {activeMapLayer === 'myMap'
+                                    ? '自分のお散歩記録や投稿はまだありません。'
+                                    : '周辺の投稿はまだありません。'}
                             </p>
                         )}
                     </PullToRefresh>

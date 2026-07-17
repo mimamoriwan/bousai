@@ -6,15 +6,19 @@ import {
 } from 'firebase/auth';
 import {
     arrayUnion,
+    collection,
     connectFirestoreEmulator,
     deleteDoc,
     doc,
     GeoPoint,
     getDoc,
+    getDocs,
     getFirestore,
+    query,
     serverTimestamp,
     setDoc,
     updateDoc,
+    where,
 } from 'firebase/firestore';
 import {
     connectStorageEmulator,
@@ -155,8 +159,22 @@ try {
     const savedWalkAction = await getDoc(walkActionRef);
     if (!savedWalkAction.exists()) throw new Error('本人のお散歩記録を読み取れませんでした。');
     console.log('✓ ゲストのお散歩記録作成と本人読み取り');
+    const ownWalkActions = await getDocs(query(
+        collection(owner.db, 'walkActions'),
+        where('uid', '==', ownerUid)
+    ));
+    if (!ownWalkActions.docs.some((docSnap) => docSnap.id === walkActionRef.id)) {
+        throw new Error('本人のお散歩記録一覧に作成済みデータがありません。');
+    }
+    console.log('✓ ゲスト本人のお散歩記録一覧');
     await assertRejected('他人によるお散歩記録読み取りを拒否', () =>
         getDoc(doc(attacker.db, 'walkActions', walkActionRef.id))
+    );
+    await assertRejected('他人によるお散歩記録一覧取得を拒否', () =>
+        getDocs(query(
+            collection(attacker.db, 'walkActions'),
+            where('uid', '==', ownerUid)
+        ))
     );
     await assertRejected('他人のお散歩記録削除を拒否', () =>
         deleteDoc(doc(attacker.db, 'walkActions', walkActionRef.id))
