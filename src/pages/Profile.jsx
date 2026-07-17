@@ -13,6 +13,7 @@ const Profile = () => {
 
     const [userPosts, setUserPosts] = useState([]);
     const [thanksCount, setThanksCount] = useState(0);
+    const [walkActionCount, setWalkActionCount] = useState(0);
     const [isLoggingIn, setIsLoggingIn] = useState(false);
 
     const [profile, setProfile] = useState(() => {
@@ -69,7 +70,7 @@ const Profile = () => {
                                 owner: '未登録',
                                 phone: '未登録',
                                 vet: '未登録',
-                                notes: '※ゲストの仮プロフィールです。Google連携すると、自分のペットの詳しい情報やマイマップを保存・引き継ぎできるようになります。',
+                                notes: '※ゲストの仮プロフィールです。Google連携すると、詳しいプロフィールやMYお散歩ルートを保存し、機種変更後も引き継げます。',
                                 photoUrl: ''
                             });
                             setIsEditing(false);
@@ -108,6 +109,26 @@ const Profile = () => {
         };
         fetchUserPosts();
     }, [currentUser]);
+
+    useEffect(() => {
+        if (!currentUser) {
+            setWalkActionCount(0);
+            return undefined;
+        }
+
+        const ownWalkActions = query(
+            collection(db, 'walkActions'),
+            where('uid', '==', currentUser.uid)
+        );
+        const unsubscribe = onSnapshot(ownWalkActions, (snapshot) => {
+            setWalkActionCount(snapshot.size);
+        }, (error) => {
+            console.error('Error fetching walk action count:', error);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
+
     // MYルート一覧をリアルタイム購読
     useEffect(() => {
         if (!currentUser || currentUser.isAnonymous) return;
@@ -480,7 +501,7 @@ const Profile = () => {
                             🐾 ゲストモードで利用中
                         </div>
                         <div style={{ fontSize: '0.75rem', color: '#3B82F6', lineHeight: 1.5 }}>
-                            投稿と地図は登録なしで使えます。Google連携でプロフィール・マイマップ・機種変更時の引き継ぎが追加されます。
+                            投稿・お散歩記録・マイマップは登録なしで使えます。Google連携で詳しいプロフィール・MYルート・機種変更時の引き継ぎが追加されます。
                         </div>
                     </div>
                     <button
@@ -751,14 +772,20 @@ const Profile = () => {
                     <span style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>ACTIVITY</span>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
+                    <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', padding: '12px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🐕</div>
+                        <div style={{ fontSize: '0.8rem', color: '#15803D' }}>お散歩アクション</div>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#15803D' }}>{walkActionCount} <span style={{ fontSize: '0.9rem', color: 'var(--color-text-base)' }}>回</span></div>
+                    </div>
+
+                    <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px 8px', textAlign: 'center' }}>
                         <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🐾</div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)' }}>発見したスポット</div>
                         <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--color-primary)' }}>{userPosts.length} <span style={{ fontSize: '0.9rem', color: 'var(--color-text-base)' }}>件</span></div>
                     </div>
 
-                    <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                    <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px 8px', textAlign: 'center' }}>
                         <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>💖</div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)' }}>もらったありがとう</div>
                         <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#DB2777' }}>{thanksCount} <span style={{ fontSize: '0.9rem', color: 'var(--color-text-base)' }}>件</span></div>
