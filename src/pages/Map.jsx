@@ -17,6 +17,7 @@ import { useMapData } from '../hooks/useMapData';
 import WalkControllerSheet from '../components/map/WalkControllerSheet';
 
 const DEFAULT_LOCATION = [36.0834, 140.0766];
+const toPublicSafetyCoordinate = (value) => Math.round(value * 1000) / 1000;
 
 const getLocationErrorMessage = (error) => {
     if (!navigator.geolocation) {
@@ -117,6 +118,7 @@ const MapPage = () => {
     const [showArchived, setShowArchived] = useState(false);
 
     const [isSelectingLocation, setIsSelectingLocation] = useState(false);
+    const [isSelectingSafetyLocation, setIsSelectingSafetyLocation] = useState(false);
     const [showPostOptions, setShowPostOptions] = useState(false);
     const [tempPost, setTempPost] = useState(null);
     const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null, visibility: 'public' });
@@ -138,6 +140,7 @@ const MapPage = () => {
 
     // スポット安全報告ローディング
     const [isSpotReporting, setIsSpotReporting] = useState(false);
+    const isSelectingAnyLocation = isSelectingLocation || isSelectingSafetyLocation;
 
     const { currentUser, currentUserHash, memberNumber } = useAuth();
 
@@ -290,6 +293,7 @@ const MapPage = () => {
         setShowPostOptions(false);
         setShowQuickPostSheet(false);
         setQuickPostStep(1);
+        setIsSelectingSafetyLocation(false);
         if (quickPost) {
             setPostForm(prev => ({
                 ...prev,
@@ -307,6 +311,89 @@ const MapPage = () => {
             import('react-hot-toast').then(({ default: toast }) => {
                 toast('現在地を取得できないため、地図から投稿場所を選んでください。', { icon: '🗺️' });
             });
+        }
+    };
+
+    const persistSpotSafetyReport = async (lat, lng) => {
+        if (!currentUser) throw new Error('Authenticated user is required');
+        await addDoc(collection(db, 'safetyReports'), {
+            reportType: 'spot',
+            location: new GeoPoint(
+                toPublicSafetyCoordinate(lat),
+                toPublicSafetyCoordinate(lng)
+            ),
+            uid: currentUser.uid,
+            createdAt: serverTimestamp(),
+        });
+        setDisplayMode('safety');
+    };
+
+    const showSpotSafetySuccess = () => {
+        import('react-hot-toast').then(({ default: toast }) =>
+            toast.success('安全を報告しました！ありがとうございます🐾', { duration: 3000 })
+        );
+    };
+
+    const startSafetyLocationSelection = (locationError) => {
+        setShowPostOptions(false);
+        setShowQuickPostSheet(false);
+        setIsSelectingLocation(false);
+        setIsSelectingSafetyLocation(true);
+        setLocationMessage(getLocationErrorMessage(locationError));
+        import('react-hot-toast').then(({ default: toast }) => {
+            toast('現在地を取得できないため、地図から安全な場所を選んでください。', { icon: '🗺️' });
+        });
+    };
+
+    const handleCurrentSpotSafetyReport = async () => {
+        setShowPostOptions(false);
+        if (isSpotReporting) return;
+        if (!navigator.geolocation) {
+            startSafetyLocationSelection();
+            return;
+        }
+
+        setIsSpotReporting(true);
+        try {
+            const pos = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 8000,
+                    maximumAge: 0,
+                });
+            });
+            await persistSpotSafetyReport(pos.coords.latitude, pos.coords.longitude);
+            showSpotSafetySuccess();
+        } catch (err) {
+            if (err?.code === 1 || err?.code === 2 || err?.code === 3) {
+                console.warn('安全スポットの位置情報取得エラー:', err);
+                startSafetyLocationSelection(err);
+            } else {
+                console.error('スポット安全報告の保存エラー:', err);
+                import('react-hot-toast').then(({ default: toast }) =>
+                    toast.error('安全報告の保存に失敗しました。もう一度お試しください。')
+                );
+            }
+        } finally {
+            setIsSpotReporting(false);
+        }
+    };
+
+    const handleSelectedSpotSafetyReport = async () => {
+        if (!mapRef.current || isSpotReporting) return;
+        const center = mapRef.current.getCenter();
+        setIsSpotReporting(true);
+        try {
+            await persistSpotSafetyReport(center.lat, center.lng);
+            setIsSelectingSafetyLocation(false);
+            showSpotSafetySuccess();
+        } catch (err) {
+            console.error('選択した安全スポットの保存エラー:', err);
+            import('react-hot-toast').then(({ default: toast }) =>
+                toast.error('安全報告の保存に失敗しました。場所を確認してもう一度お試しください。')
+            );
+        } finally {
+            setIsSpotReporting(false);
         }
     };
 
@@ -471,7 +558,7 @@ const MapPage = () => {
                 ) : (
                     <>
                         {/* Action Menu (FAB) & Top Overlays */}
-                        {!isSelectingLocation && (
+                        {!isSelectingAnyLocation && (
                             <>
                                 {/* ── 表示モード切り替えタブ ── */}
                                 <div style={{
@@ -715,33 +802,7 @@ const MapPage = () => {
 
                                             {/* 🟢 スポット安全報告 */}
                                             <button
-                                                onClick={async () => {
-                                                    setShowPostOptions(false);
-                                                    if (isSpotReporting) return;
-                                                    setIsSpotReporting(true);
-                                                    try {
-                                                        const pos = await new Promise((resolve, reject) =>
-                                                            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 })
-                                                        );
-                                                        const { latitude, longitude } = pos.coords;
-                                                        await addDoc(collection(db, 'safetyReports'), {
-                                                            reportType: 'spot',
-                                                            location: new GeoPoint(latitude, longitude),
-                                                            uid: currentUser?.uid || null,
-                                                            createdAt: serverTimestamp(),
-                                                        });
-                                                        import('react-hot-toast').then(({ default: toast }) =>
-                                                            toast.success('安全を報告しました！ありがとうございます🐾', { duration: 3000 })
-                                                        );
-                                                    } catch (err) {
-                                                        console.error('スポット安全報告エラー:', err);
-                                                        import('react-hot-toast').then(({ default: toast }) =>
-                                                            toast.error('報告に失敗しました。位置情報の許可を確認してください。')
-                                                        );
-                                                    } finally {
-                                                        setIsSpotReporting(false);
-                                                    }
-                                                }}
+                                                onClick={handleCurrentSpotSafetyReport}
                                                 disabled={isSpotReporting}
                                                 style={{
                                                     padding: '10px 8px', borderRadius: '12px',
@@ -896,7 +957,7 @@ const MapPage = () => {
                         )}
 
                         {/* ── 地図から場所選択オーバーレイ ── */}
-                        {isSelectingLocation && (
+                        {isSelectingAnyLocation && (
                             <>
                                 <div style={{
                                     position: 'absolute', top: '50%', left: '50%',
@@ -906,7 +967,9 @@ const MapPage = () => {
                                     alignItems: 'center', justifyContent: 'center',
                                     filter: 'drop-shadow(0px 4px 4px rgba(0,0,0,0.3))'
                                 }}>
-                                    <div style={{ fontSize: '3rem', lineHeight: '1' }}>📍</div>
+                                    <div style={{ fontSize: '3rem', lineHeight: '1' }}>
+                                        {isSelectingSafetyLocation ? '🟢' : '📍'}
+                                    </div>
                                 </div>
                                 <div style={{
                                     position: 'absolute', bottom: '30px', left: '50%',
@@ -918,20 +981,37 @@ const MapPage = () => {
                                     <button
                                         className="btn card"
                                         style={{
-                                            backgroundColor: 'var(--color-primary)', color: 'white',
+                                            backgroundColor: isSelectingSafetyLocation ? '#16A34A' : 'var(--color-primary)', color: 'white',
                                             fontWeight: 'bold', fontSize: '1.1rem', padding: '16px',
                                             borderRadius: '9999px', margin: 0, textAlign: 'center',
                                             border: 'none', boxShadow: '0 4px 12px rgba(249, 115, 22, 0.4)'
                                         }}
-                                        onClick={() => {
-                                            if (mapRef.current) {
+                                        onClick={async () => {
+                                            if (isSelectingSafetyLocation) {
+                                                await handleSelectedSpotSafetyReport();
+                                            } else if (mapRef.current) {
                                                 const center = mapRef.current.getCenter();
                                                 setTempPost({ lat: center.lat, lng: center.lng });
                                             }
                                         }}
+                                        disabled={isSpotReporting}
                                     >
-                                        📍 ここで決定
+                                        {isSpotReporting
+                                            ? '報告中...'
+                                            : isSelectingSafetyLocation
+                                                ? '🟢 この場所を安全と報告'
+                                                : '📍 ここで決定'}
                                     </button>
+                                    {isSelectingSafetyLocation && (
+                                        <div style={{
+                                            backgroundColor: 'rgba(255,255,255,0.95)', color: '#4B5563',
+                                            fontSize: '0.78rem', lineHeight: 1.5, textAlign: 'center',
+                                            padding: '8px 12px', borderRadius: '12px',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                                        }}>
+                                            🔒 公開位置は約100m単位にぼかして保存します
+                                        </div>
+                                    )}
                                     <button
                                         className="btn card"
                                         style={{
@@ -940,7 +1020,10 @@ const MapPage = () => {
                                             borderRadius: '9999px', margin: 0, textAlign: 'center',
                                             border: 'none', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
                                         }}
-                                        onClick={() => setIsSelectingLocation(false)}
+                                        onClick={() => {
+                                            setIsSelectingLocation(false);
+                                            setIsSelectingSafetyLocation(false);
+                                        }}
                                     >
                                         キャンセル
                                     </button>
@@ -1318,7 +1401,7 @@ const MapPage = () => {
 
             {/* ── 投稿一覧ボトムシート ── */}
             <BottomSheet
-                open={!isSelectingLocation && !showQuickPostSheet}
+                open={!isSelectingAnyLocation && !showQuickPostSheet}
                 blocking={false}
                 snapPoints={({ maxHeight }) => [maxHeight * 0.3, maxHeight * 0.65]}
                 defaultSnap={({ snapPoints }) => snapPoints[0]}
@@ -1352,7 +1435,7 @@ const MapPage = () => {
                         </div>
                     </div>
                 }
-                style={{ zIndex: 10, display: isSelectingLocation ? 'none' : 'block' }}
+                style={{ zIndex: 10, display: isSelectingAnyLocation ? 'none' : 'block' }}
             >
                 <div style={{ padding: '0 var(--spacing-md)', paddingBottom: '120px' }}>
                     <PullToRefresh onRefresh={handleRefresh} pullingContent="" refreshingContent={<div style={{ textAlign: 'center', padding: '10px', color: 'var(--color-text-sub)' }}>更新中...</div>}>

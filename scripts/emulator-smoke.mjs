@@ -9,6 +9,7 @@ import {
     connectFirestoreEmulator,
     deleteDoc,
     doc,
+    GeoPoint,
     getDoc,
     getFirestore,
     serverTimestamp,
@@ -89,6 +90,7 @@ let publicPinRef;
 let privatePinRef;
 let walkActionRef;
 let invalidWalkActionRef;
+let safetyReportRef;
 let imageRef;
 
 try {
@@ -172,6 +174,20 @@ try {
     );
     invalidWalkActionRef = null;
 
+    safetyReportRef = doc(owner.db, 'safetyReports', `spot-${suffix}`);
+    await setDoc(safetyReportRef, {
+        reportType: 'spot',
+        location: new GeoPoint(35.672, 139.736),
+        uid: ownerUid,
+        createdAt: serverTimestamp(),
+    });
+    const publicSafetyReport = await getDoc(doc(reader.db, 'safetyReports', safetyReportRef.id));
+    if (!publicSafetyReport.exists()) throw new Error('安全スポットを公開読み取りできませんでした。');
+    console.log('✓ ゲストの安全スポット報告と公開読み取り');
+    await assertRejected('他人による安全スポット削除を拒否', () =>
+        deleteDoc(doc(attacker.db, 'safetyReports', safetyReportRef.id))
+    );
+
     const onePixelPng = Uint8Array.from(Buffer.from(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z6C8AAAAASUVORK5CYII=',
         'base64'
@@ -193,6 +209,7 @@ try {
 } finally {
     if (imageRef) await deleteObject(imageRef).catch(() => {});
     if (invalidWalkActionRef) await deleteDoc(invalidWalkActionRef).catch(() => {});
+    if (safetyReportRef) await deleteDoc(safetyReportRef).catch(() => {});
     if (walkActionRef) await deleteDoc(walkActionRef).catch(() => {});
     if (privatePinRef) await deleteDoc(privatePinRef).catch(() => {});
     if (publicPinRef) await deleteDoc(publicPinRef).catch(() => {});
