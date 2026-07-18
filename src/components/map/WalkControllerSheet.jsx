@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { db } from '../../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
@@ -38,75 +39,77 @@ const WALK_ACTIONS = [
     },
 ];
 
+const getLocationFailureMessage = (error) => {
+    if (!navigator.geolocation) {
+        return 'この端末では位置情報を利用できません。';
+    }
+    if (error?.code === 1) {
+        return '位置情報が許可されていません。端末の設定をご確認ください。';
+    }
+    if (error?.code === 3) {
+        return '現在地を取得できませんでした。屋外などで、もう一度お試しください。';
+    }
+    return '現在地を取得できませんでした。もう一度お試しください。';
+};
+
 /**
  * お散歩記録コントローラー（カスタム fixed パネル）
  *
  * ボトムナビゲーションバー（64px）の真上に配置するため、
  * react-spring-bottom-sheet ではなく position:fixed で実装。
  *
- * ボタンを押すと：
- *   1. Firestore の `walkActions` コレクションに点データを保存（プライベートログ）
- *   2. Firestore の `map_pins` コレクションにも保存（マップ表示用）
+ * ボタンを押すと、正確な位置を本人だけが読める `walkActions` に保存する。
+ * 公開マップでは、将来このデータを集約・匿名化した情報だけを表示する。
  */
-const WalkControllerSheet = ({ isOpen, onClose }) => {
-    const { currentUser, currentUserHash } = useAuth();
+const WalkControllerSheet = ({ isOpen, onClose, onRequestMapSelection }) => {
+    const { currentUser } = useAuth();
+    const [recordingActionType, setRecordingActionType] = useState(null);
 
     const handleAction = async (actionType, label) => {
-        if (!navigator.geolocation) {
-            const { default: toast } = await import('react-hot-toast');
-            toast.error('位置情報が取得できません。設定を確認してください。');
-            return;
-        }
-
+        if (!currentUser || recordingActionType) return;
+        setRecordingActionType(actionType);
         const { default: toast } = await import('react-hot-toast');
-        toast.success(`${label}を記録しました🐾`, { duration: 2500, icon: '📍' });
+        try {
+            if (!navigator.geolocation) {
+                throw new Error('Geolocation is unavailable');
+            }
 
-        navigator.geolocation.getCurrentPosition(
-            async (pos) => {
-                const { latitude: lat, longitude: lng } = pos.coords;
-                const now = Date.now();
+            const pos = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 8000,
+                    maximumAge: 0,
+                });
+            });
+            const { latitude: lat, longitude: lng } = pos.coords;
 
-                const walkActionData = {
-                    uid: currentUser?.uid ?? null,
-                    actionType,
-                    lat,
-                    lng,
-                    timestamp: now,
-                    createdAt: serverTimestamp(),
-                };
+            await addDoc(collection(db, 'walkActions'), {
+                uid: currentUser.uid,
+                actionType,
+                lat,
+                lng,
+                timestamp: Date.now(),
+                createdAt: serverTimestamp(),
+            });
 
-                const mapPinData = {
-                    lat,
-                    lng,
-                    type: `walk_${actionType}`,
-                    title: label,
-                    note: '',
-                    date: new Date().toLocaleDateString(),
-                    timestamp: now,
-                    imageUrl: null,
-                    imagePath: null,
-                    resolved: false,
-                    thanks: [],
-                    savedBy: [],
-                    visibility: 'public',
-                    userHash: currentUserHash ?? null,
-                };
-
-                try {
-                    await Promise.all([
-                        addDoc(collection(db, 'walkActions'), walkActionData),
-                        addDoc(collection(db, 'map_pins'), mapPinData),
-                    ]);
-                } catch (err) {
-                    console.error('お散歩アクション保存エラー:', err);
-                    toast.error('記録の保存に失敗しました。');
-                }
-            },
-            (err) => {
+            toast.success(`${label}を記録しました🐾`, { duration: 2500, icon: '📍' });
+        } catch (err) {
+            if (err?.code === 1 || err?.code === 2 || err?.code === 3 || !navigator.geolocation) {
                 console.warn('位置情報取得エラー:', err);
-            },
-            { enableHighAccuracy: true, timeout: 8000 }
-        );
+                if (onRequestMapSelection) {
+                    toast('現在地を取得できないため、地図から記録場所を選んでください。', { icon: '🗺️' });
+                    onClose();
+                    onRequestMapSelection({ actionType, label, locationError: err });
+                } else {
+                    toast.error(getLocationFailureMessage(err));
+                }
+            } else {
+                console.error('お散歩アクション保存エラー:', err);
+                toast.error('記録の保存に失敗しました。もう一度お試しください。');
+            }
+        } finally {
+            setRecordingActionType(null);
+        }
     };
 
     return (
@@ -166,6 +169,8 @@ const WalkControllerSheet = ({ isOpen, onClose }) => {
                     <button
                         key={action.type}
                         onClick={() => handleAction(action.type, action.label)}
+                        disabled={Boolean(recordingActionType)}
+                        aria-busy={recordingActionType === action.type}
                         style={{
                             padding: '16px 8px',
                             borderRadius: '16px',
@@ -179,11 +184,14 @@ const WalkControllerSheet = ({ isOpen, onClose }) => {
                             alignItems: 'center',
                             gap: '8px',
                             boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
-                            cursor: 'pointer',
+                            cursor: recordingActionType ? 'default' : 'pointer',
+                            opacity: recordingActionType && recordingActionType !== action.type ? 0.5 : 1,
                         }}
                     >
-                        <span style={{ fontSize: '2rem' }}>{action.emoji}</span>
-                        {action.label}
+                        <span style={{ fontSize: '2rem' }}>
+                            {recordingActionType === action.type ? '⏳' : action.emoji}
+                        </span>
+                        {recordingActionType === action.type ? '記録中...' : action.label}
                     </button>
                 ))}
             </div>

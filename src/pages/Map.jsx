@@ -16,6 +16,28 @@ import { getMarkerIcon, shelterIcon } from '../constants/mapIcons';
 import { useMapData } from '../hooks/useMapData';
 import WalkControllerSheet from '../components/map/WalkControllerSheet';
 
+const DEFAULT_LOCATION = [36.0834, 140.0766];
+const toPublicSafetyCoordinate = (value) => Math.round(value * 1000) / 1000;
+const WALK_ACTION_META = {
+    sniff: { label: 'くん活', emoji: '🐕' },
+    pee: { label: 'おしっこ', emoji: '💧' },
+    poop: { label: 'うんち', emoji: '💩' },
+    mark: { label: 'マーキング', emoji: '📍' },
+};
+
+const getLocationErrorMessage = (error) => {
+    if (!navigator.geolocation) {
+        return 'このブラウザは位置情報に対応していないため、つくば駅周辺を表示しています。';
+    }
+    if (error?.code === 1) {
+        return '位置情報が許可されていないため、つくば駅周辺を表示しています。ブラウザの位置情報設定をご確認ください。';
+    }
+    if (error?.code === 3) {
+        return '現在地の取得が時間切れになったため、つくば駅周辺を表示しています。';
+    }
+    return '現在地を取得できなかったため、つくば駅周辺を表示しています。';
+};
+
 // ─────────────────────────────────────────
 // LocationMarker: 現在地ピン（MapContainer 内で使用）
 // ─────────────────────────────────────────
@@ -89,11 +111,13 @@ const MapPage = () => {
     const {
         userPosts,
         safetyReports,
+        walkActions,
         fetchLatestPins,
         handleThanks,
         handleSavePost,
         handleResolve,
         deletePost,
+        deleteWalkAction,
     } = useMapData();
 
     // ── UI 状態 ──
@@ -102,6 +126,8 @@ const MapPage = () => {
     const [showArchived, setShowArchived] = useState(false);
 
     const [isSelectingLocation, setIsSelectingLocation] = useState(false);
+    const [isSelectingSafetyLocation, setIsSelectingSafetyLocation] = useState(false);
+    const [pendingWalkAction, setPendingWalkAction] = useState(null);
     const [showPostOptions, setShowPostOptions] = useState(false);
     const [tempPost, setTempPost] = useState(null);
     const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null, visibility: 'public' });
@@ -123,11 +149,15 @@ const MapPage = () => {
 
     // スポット安全報告ローディング
     const [isSpotReporting, setIsSpotReporting] = useState(false);
+    const [isWalkActionSaving, setIsWalkActionSaving] = useState(false);
+    const isSelectingWalkLocation = Boolean(pendingWalkAction);
+    const isSelectingAnyLocation = isSelectingLocation || isSelectingSafetyLocation || isSelectingWalkLocation;
 
     const { currentUser, currentUserHash, memberNumber } = useAuth();
 
     const mapRef = useRef(null);
     const markerRefs = useRef(new Map());
+    const walkMarkerRefs = useRef(new Map());
     const [activePostId, setActivePostId] = useState(null);
     const [isMinTimeElapsed, setIsMinTimeElapsed] = useState(false);
 
@@ -139,48 +169,86 @@ const MapPage = () => {
     // 初期位置取得
     const [initialCenter, setInitialCenter] = useState(null);
     const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+    const [locationMessage, setLocationMessage] = useState('');
 
     useEffect(() => {
-        const DEFAULT_LOCATION = [36.0834, 140.0766];
         if (!navigator.geolocation) {
             setInitialCenter(DEFAULT_LOCATION);
+            setLocationMessage(getLocationErrorMessage());
             setIsLoadingLocation(false);
             return;
         }
-        const timeoutId = setTimeout(() => {
+
+        let settled = false;
+        const finishWithFallback = (error) => {
+            if (settled) return;
+            settled = true;
             setInitialCenter(DEFAULT_LOCATION);
+            setLocationMessage(getLocationErrorMessage(error));
             setIsLoadingLocation(false);
-        }, 5000);
+        };
+        const timeoutId = setTimeout(() => {
+            finishWithFallback({ code: 3 });
+        }, 6000);
 
         navigator.geolocation.getCurrentPosition(
             (pos) => {
+                if (settled) return;
+                settled = true;
                 clearTimeout(timeoutId);
                 setInitialCenter([pos.coords.latitude, pos.coords.longitude]);
+                setLocationMessage('');
                 setIsLoadingLocation(false);
             },
             (err) => {
                 clearTimeout(timeoutId);
                 console.warn(`Geolocation error (${err.code}): ${err.message}`);
-                setInitialCenter(DEFAULT_LOCATION);
-                setIsLoadingLocation(false);
+                finishWithFallback(err);
             },
             { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
         );
-        return () => clearTimeout(timeoutId);
+        return () => {
+            settled = true;
+            clearTimeout(timeoutId);
+        };
     }, []);
+
+    const moveToCurrentLocation = () => {
+        if (showQuickPostSheet) closeQuickPost();
+
+        if (!navigator.geolocation) {
+            setLocationMessage(getLocationErrorMessage());
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const center = [pos.coords.latitude, pos.coords.longitude];
+                setInitialCenter(center);
+                setLocationMessage('');
+                if (mapRef.current) {
+                    mapRef.current.setView(center, 16, { animate: true, duration: 0.5 });
+                    mapRef.current.fire('locationfound', {
+                        latlng: { lat: center[0], lng: center[1] }
+                    });
+                }
+            },
+            (error) => {
+                console.warn('現在地取得エラー:', error);
+                setLocationMessage(getLocationErrorMessage(error));
+            },
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        );
+    };
 
     const handleRefresh = async () => {
         await fetchLatestPins();
     };
 
-    const handleMapClick = (latlng) => {
-        setTempPost(latlng);
-    };
-
     // ── 通常投稿フォームの送信 ──
     const handlePostSubmit = async (e) => {
         e.preventDefault();
-        if (!tempPost) return;
+        if (!tempPost || !currentUser) return;
         setIsSubmitting(true);
         try {
             let imageUrl = null;
@@ -189,7 +257,7 @@ const MapPage = () => {
                 const mimeTypeMatch = postForm.image.match(/data:(.*?);/);
                 const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
                 const ext = mimeType === 'image/webp' ? 'webp' : 'jpg';
-                const filename = `map_pins/${Date.now()}.${ext}`;
+                const filename = `map_pins/${currentUser.uid}/${Date.now()}.${ext}`;
                 const storageRef = ref(storage, filename);
                 await uploadString(storageRef, postForm.image, 'data_url');
                 imageUrl = await getDownloadURL(storageRef);
@@ -211,6 +279,7 @@ const MapPage = () => {
                 savedBy: [],
                 visibility: postForm.visibility || 'public',
                 userHash: currentUserHash ?? null,
+                ownerUid: currentUser.uid,
             });
 
             setTempPost(null);
@@ -232,7 +301,156 @@ const MapPage = () => {
         setPostForm(prev => ({ ...prev, image: null }));
     };
 
+    const startMapLocationSelection = ({ quickPost = null, image = null, locationError, notifyLocationFailure = false } = {}) => {
+        setShowPostOptions(false);
+        setShowQuickPostSheet(false);
+        setQuickPostStep(1);
+        setIsSelectingSafetyLocation(false);
+        if (quickPost) {
+            setPostForm(prev => ({
+                ...prev,
+                type: quickPost.type,
+                title: quickPost.title,
+                note: '',
+                image,
+                visibility: 'public',
+            }));
+        }
+        setIsSelectingLocation(true);
+
+        if (notifyLocationFailure) {
+            setLocationMessage(getLocationErrorMessage(locationError));
+            import('react-hot-toast').then(({ default: toast }) => {
+                toast('現在地を取得できないため、地図から投稿場所を選んでください。', { icon: '🗺️' });
+            });
+        }
+    };
+
+    const persistSpotSafetyReport = async (lat, lng) => {
+        if (!currentUser) throw new Error('Authenticated user is required');
+        await addDoc(collection(db, 'safetyReports'), {
+            reportType: 'spot',
+            location: new GeoPoint(
+                toPublicSafetyCoordinate(lat),
+                toPublicSafetyCoordinate(lng)
+            ),
+            uid: currentUser.uid,
+            createdAt: serverTimestamp(),
+        });
+        setDisplayMode('safety');
+    };
+
+    const showSpotSafetySuccess = () => {
+        import('react-hot-toast').then(({ default: toast }) =>
+            toast.success('安全を報告しました！ありがとうございます🐾', { duration: 3000 })
+        );
+    };
+
+    const startSafetyLocationSelection = (locationError) => {
+        setShowPostOptions(false);
+        setShowQuickPostSheet(false);
+        setIsSelectingLocation(false);
+        setIsSelectingSafetyLocation(true);
+        setLocationMessage(getLocationErrorMessage(locationError));
+        import('react-hot-toast').then(({ default: toast }) => {
+            toast('現在地を取得できないため、地図から安全な場所を選んでください。', { icon: '🗺️' });
+        });
+    };
+
+    const handleCurrentSpotSafetyReport = async () => {
+        setShowPostOptions(false);
+        if (isSpotReporting) return;
+        if (!navigator.geolocation) {
+            startSafetyLocationSelection();
+            return;
+        }
+
+        setIsSpotReporting(true);
+        try {
+            const pos = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 8000,
+                    maximumAge: 0,
+                });
+            });
+            await persistSpotSafetyReport(pos.coords.latitude, pos.coords.longitude);
+            showSpotSafetySuccess();
+        } catch (err) {
+            if (err?.code === 1 || err?.code === 2 || err?.code === 3) {
+                console.warn('安全スポットの位置情報取得エラー:', err);
+                startSafetyLocationSelection(err);
+            } else {
+                console.error('スポット安全報告の保存エラー:', err);
+                import('react-hot-toast').then(({ default: toast }) =>
+                    toast.error('安全報告の保存に失敗しました。もう一度お試しください。')
+                );
+            }
+        } finally {
+            setIsSpotReporting(false);
+        }
+    };
+
+    const handleSelectedSpotSafetyReport = async () => {
+        if (!mapRef.current || isSpotReporting) return;
+        const center = mapRef.current.getCenter();
+        setIsSpotReporting(true);
+        try {
+            await persistSpotSafetyReport(center.lat, center.lng);
+            setIsSelectingSafetyLocation(false);
+            showSpotSafetySuccess();
+        } catch (err) {
+            console.error('選択した安全スポットの保存エラー:', err);
+            import('react-hot-toast').then(({ default: toast }) =>
+                toast.error('安全報告の保存に失敗しました。場所を確認してもう一度お試しください。')
+            );
+        } finally {
+            setIsSpotReporting(false);
+        }
+    };
+
+    const startWalkLocationSelection = ({ actionType, label, locationError }) => {
+        setShowPostOptions(false);
+        setShowQuickPostSheet(false);
+        setIsSelectingLocation(false);
+        setIsSelectingSafetyLocation(false);
+        setPendingWalkAction({ actionType, label });
+        setLocationMessage(getLocationErrorMessage(locationError));
+    };
+
+    const handleSelectedWalkAction = async () => {
+        if (!mapRef.current || !currentUser || !pendingWalkAction || isWalkActionSaving) return;
+        const center = mapRef.current.getCenter();
+        setIsWalkActionSaving(true);
+        try {
+            await addDoc(collection(db, 'walkActions'), {
+                uid: currentUser.uid,
+                actionType: pendingWalkAction.actionType,
+                lat: center.lat,
+                lng: center.lng,
+                timestamp: Date.now(),
+                createdAt: serverTimestamp(),
+            });
+            const completedLabel = pendingWalkAction.label;
+            setPendingWalkAction(null);
+            setActiveMapLayer('myMap');
+            setDisplayMode('alert');
+            setFilter('walk');
+            import('react-hot-toast').then(({ default: toast }) => {
+                toast.success(`${completedLabel}を記録しました🐾`, { duration: 2500, icon: '📍' });
+            });
+        } catch (error) {
+            console.error('選択したお散歩アクションの保存エラー:', error);
+            import('react-hot-toast').then(({ default: toast }) => {
+                toast.error('記録の保存に失敗しました。場所を確認してもう一度お試しください。');
+            });
+        } finally {
+            setIsWalkActionSaving(false);
+        }
+    };
+
     const handleQuickPostSubmit = async (withPhoto = false, imageDataUrl = null) => {
+        if (!currentUser) return;
         setIsSubmitting(true);
         try {
             let lat, lng;
@@ -244,14 +462,13 @@ const MapPage = () => {
                 lng = pos.coords.longitude;
             } catch (err) {
                 console.warn('クイック投稿の位置取得失敗:', err);
-                if (initialCenter) {
-                    lat = initialCenter[0];
-                    lng = initialCenter[1];
-                } else {
-                    alert('現在地を取得できませんでした。');
-                    setIsSubmitting(false);
-                    return;
-                }
+                startMapLocationSelection({
+                    quickPost: quickPostData,
+                    image: withPhoto ? (imageDataUrl || postForm.image) : null,
+                    locationError: err,
+                    notifyLocationFailure: true,
+                });
+                return;
             }
 
             let imageUrl = null;
@@ -261,7 +478,7 @@ const MapPage = () => {
                 const mimeTypeMatch = finalImage.match(/data:(.*?);/);
                 const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
                 const ext = mimeType === 'image/webp' ? 'webp' : 'jpg';
-                const filename = `map_pins/${Date.now()}.${ext}`;
+                const filename = `map_pins/${currentUser.uid}/${Date.now()}.${ext}`;
                 const storageRef = ref(storage, filename);
                 await uploadString(storageRef, finalImage, 'data_url');
                 imageUrl = await getDownloadURL(storageRef);
@@ -282,6 +499,7 @@ const MapPage = () => {
                 savedBy: [],
                 visibility: 'public',
                 userHash: currentUserHash ?? null,
+                ownerUid: currentUser.uid,
             });
 
             setShowQuickPostSheet(false);
@@ -303,7 +521,10 @@ const MapPage = () => {
 
         if (activeMapLayer === 'myMap') {
             if (!currentUser) return false;
-            const isMine = Boolean(currentUserHash && post.userHash && post.userHash === currentUserHash);
+            const isMine = Boolean(
+                (currentUser && post.ownerUid === currentUser.uid)
+                || (currentUserHash && post.userHash && post.userHash === currentUserHash)
+            );
             const isSaved = Boolean(currentUserHash && post.savedBy?.includes(currentUserHash));
             if (!isMine && !isSaved) return false;
             if (filter !== 'all' && filter !== 'resolved') {
@@ -332,6 +553,11 @@ const MapPage = () => {
         }
     });
 
+    const displayWalkActions = activeMapLayer === 'myMap'
+        && (filter === 'all' || filter === 'walk')
+        ? walkActions
+        : [];
+
     const handleListPostClick = (post) => {
         const map = mapRef.current;
         if (map) {
@@ -352,6 +578,15 @@ const MapPage = () => {
                 setActivePostId(post.id);
             }
         }
+    };
+
+    const handleWalkActionClick = (action) => {
+        const map = mapRef.current;
+        if (map) {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            map.flyTo([action.lat, action.lng], 17, { animate: true, duration: 0.5 });
+        }
+        walkMarkerRefs.current.get(action.id)?.openPopup();
     };
 
     // ─────────────────────────────────────────
@@ -389,7 +624,7 @@ const MapPage = () => {
                 ) : (
                     <>
                         {/* Action Menu (FAB) & Top Overlays */}
-                        {!isSelectingLocation && (
+                        {!isSelectingAnyLocation && (
                             <>
                                 {/* ── 表示モード切り替えタブ ── */}
                                 <div style={{
@@ -444,41 +679,38 @@ const MapPage = () => {
                                     </button>
                                 </div>
 
+                                {locationMessage && (
+                                    <div
+                                        role="status"
+                                        style={{
+                                            position: 'absolute', top: '70px', left: '12px', right: '12px',
+                                            zIndex: 1090, backgroundColor: 'rgba(255,255,255,0.96)',
+                                            border: '1px solid #FDBA74', borderRadius: '12px',
+                                            boxShadow: '0 3px 10px rgba(0,0,0,0.14)', padding: '9px 10px',
+                                            display: 'flex', alignItems: 'center', gap: '8px',
+                                            color: '#9A3412', fontSize: '0.75rem', lineHeight: 1.4,
+                                        }}
+                                    >
+                                        <span aria-hidden="true">📍</span>
+                                        <span style={{ flex: 1 }}>{locationMessage}</span>
+                                        <button
+                                            type="button"
+                                            onClick={moveToCurrentLocation}
+                                            style={{
+                                                flexShrink: 0, border: '1px solid #FB923C', borderRadius: '9px',
+                                                backgroundColor: '#FFF7ED', color: '#C2410C',
+                                                padding: '6px 8px', fontWeight: 'bold', cursor: 'pointer',
+                                            }}
+                                        >
+                                            再試行
+                                        </button>
+                                    </div>
+                                )}
+
                                 {/* 現在地へ戻る FAB */}
                                 <div style={{ position: 'absolute', bottom: 'calc(25vh + 100px)', right: '20px', zIndex: 1000 }}>
                                     <button
-                                        onClick={() => {
-                                            if (showQuickPostSheet) closeQuickPost();
-
-                                            const navigateToCenter = (lat, lng) => {
-                                                if (mapRef.current) {
-                                                    mapRef.current.setView([lat, lng], 16, { animate: true, duration: 0.5 });
-                                                    mapRef.current.fire('locationfound', { latlng: { lat, lng } });
-                                                }
-                                            };
-
-                                            if (!navigator.geolocation) {
-                                                if (initialCenter) navigateToCenter(initialCenter[0], initialCenter[1]);
-                                                else alert('お使いの端末・ブラウザでは現在地取得機能がサポートされていません。');
-                                                return;
-                                            }
-
-                                            navigator.geolocation.getCurrentPosition(
-                                                (pos) => navigateToCenter(pos.coords.latitude, pos.coords.longitude),
-                                                (error) => {
-                                                    console.warn('現在地取得エラー:', error);
-                                                    if (initialCenter) {
-                                                        navigateToCenter(initialCenter[0], initialCenter[1]);
-                                                    } else {
-                                                        let msg = '現在地を取得できませんでした。';
-                                                        if (error.code === 1) msg = '位置情報の利用が許可されていません。端末の設定をご確認ください。';
-                                                        if (error.code === 2 || error.code === 3) msg = '位置情報が取得できません。ブラウザの権限設定を確認してください。';
-                                                        alert(msg);
-                                                    }
-                                                },
-                                                { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
-                                            );
-                                        }}
+                                        onClick={moveToCurrentLocation}
                                         style={{
                                             backgroundColor: 'white',
                                             color: 'var(--color-primary)',
@@ -580,13 +812,12 @@ const MapPage = () => {
                                                             (pos) => setTempPost({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
                                                             (err) => {
                                                                 console.warn('Geolocation fallback:', err);
-                                                                if (initialCenter) setTempPost({ lat: initialCenter[0], lng: initialCenter[1] });
-                                                                else alert('現在地を取得できませんでした。');
+                                                                startMapLocationSelection({ locationError: err, notifyLocationFailure: true });
                                                             },
                                                             { enableHighAccuracy: true, timeout: 5000 }
                                                         );
-                                                    } else if (initialCenter) {
-                                                        setTempPost({ lat: initialCenter[0], lng: initialCenter[1] });
+                                                    } else {
+                                                        startMapLocationSelection({ notifyLocationFailure: true });
                                                     }
                                                 }}
                                                 style={{
@@ -605,7 +836,7 @@ const MapPage = () => {
 
                                             {/* 🗺️ 地図から選ぶ */}
                                             <button
-                                                onClick={() => { setShowPostOptions(false); setIsSelectingLocation(true); }}
+                                                onClick={() => startMapLocationSelection()}
                                                 style={{
                                                     padding: '10px 8px', borderRadius: '12px',
                                                     backgroundColor: '#F3F4F6', color: '#1F2937',
@@ -637,33 +868,7 @@ const MapPage = () => {
 
                                             {/* 🟢 スポット安全報告 */}
                                             <button
-                                                onClick={async () => {
-                                                    setShowPostOptions(false);
-                                                    if (isSpotReporting) return;
-                                                    setIsSpotReporting(true);
-                                                    try {
-                                                        const pos = await new Promise((resolve, reject) =>
-                                                            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000 })
-                                                        );
-                                                        const { latitude, longitude } = pos.coords;
-                                                        await addDoc(collection(db, 'safetyReports'), {
-                                                            reportType: 'spot',
-                                                            location: new GeoPoint(latitude, longitude),
-                                                            uid: currentUser?.uid || null,
-                                                            createdAt: serverTimestamp(),
-                                                        });
-                                                        import('react-hot-toast').then(({ default: toast }) =>
-                                                            toast.success('安全を報告しました！ありがとうございます🐾', { duration: 3000 })
-                                                        );
-                                                    } catch (err) {
-                                                        console.error('スポット安全報告エラー:', err);
-                                                        import('react-hot-toast').then(({ default: toast }) =>
-                                                            toast.error('報告に失敗しました。位置情報の許可を確認してください。')
-                                                        );
-                                                    } finally {
-                                                        setIsSpotReporting(false);
-                                                    }
-                                                }}
+                                                onClick={handleCurrentSpotSafetyReport}
                                                 disabled={isSpotReporting}
                                                 style={{
                                                     padding: '10px 8px', borderRadius: '12px',
@@ -755,11 +960,13 @@ const MapPage = () => {
                                                 >🌍 みんなのマップ</button>
                                                 <button
                                                     onClick={() => {
-                                                        if (!currentUser || currentUser.isAnonymous) {
-                                                            alert('自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）');
+                                                        if (!currentUser) {
+                                                            alert('ゲスト情報を準備中です。少し待ってからもう一度お試しください。');
                                                             return;
                                                         }
                                                         setActiveMapLayer('myMap');
+                                                        setDisplayMode('alert');
+                                                        setFilter('all');
                                                     }}
                                                     style={{
                                                         flex: 1, padding: '7px 4px', borderRadius: '5px', border: 'none',
@@ -772,6 +979,16 @@ const MapPage = () => {
                                                     }}
                                                 >🗺️ マイマップ</button>
                                             </div>
+
+                                            {activeMapLayer === 'myMap' && currentUser?.isAnonymous && (
+                                                <div style={{
+                                                    marginBottom: '6px', padding: '7px 9px', borderRadius: '8px',
+                                                    backgroundColor: '#FFF7ED', color: '#9A3412',
+                                                    fontSize: '0.7rem', lineHeight: 1.45,
+                                                }}>
+                                                    🐾 ゲスト記録はこの端末で確認できます。Google連携すると機種変更後も引き継げます。
+                                                </div>
+                                            )}
 
                                             {activeMapLayer === 'public' && (
                                                 <button
@@ -818,7 +1035,7 @@ const MapPage = () => {
                         )}
 
                         {/* ── 地図から場所選択オーバーレイ ── */}
-                        {isSelectingLocation && (
+                        {isSelectingAnyLocation && (
                             <>
                                 <div style={{
                                     position: 'absolute', top: '50%', left: '50%',
@@ -828,7 +1045,13 @@ const MapPage = () => {
                                     alignItems: 'center', justifyContent: 'center',
                                     filter: 'drop-shadow(0px 4px 4px rgba(0,0,0,0.3))'
                                 }}>
-                                    <div style={{ fontSize: '3rem', lineHeight: '1' }}>📍</div>
+                                    <div style={{ fontSize: '3rem', lineHeight: '1' }}>
+                                        {isSelectingSafetyLocation
+                                            ? '🟢'
+                                            : isSelectingWalkLocation
+                                                ? (WALK_ACTION_META[pendingWalkAction.actionType]?.emoji || '🐾')
+                                                : '📍'}
+                                    </div>
                                 </div>
                                 <div style={{
                                     position: 'absolute', bottom: '30px', left: '50%',
@@ -840,20 +1063,48 @@ const MapPage = () => {
                                     <button
                                         className="btn card"
                                         style={{
-                                            backgroundColor: 'var(--color-primary)', color: 'white',
+                                            backgroundColor: isSelectingSafetyLocation
+                                                ? '#16A34A'
+                                                : isSelectingWalkLocation
+                                                    ? '#BE185D'
+                                                    : 'var(--color-primary)',
+                                            color: 'white',
                                             fontWeight: 'bold', fontSize: '1.1rem', padding: '16px',
                                             borderRadius: '9999px', margin: 0, textAlign: 'center',
                                             border: 'none', boxShadow: '0 4px 12px rgba(249, 115, 22, 0.4)'
                                         }}
-                                        onClick={() => {
-                                            if (mapRef.current) {
+                                        onClick={async () => {
+                                            if (isSelectingSafetyLocation) {
+                                                await handleSelectedSpotSafetyReport();
+                                            } else if (isSelectingWalkLocation) {
+                                                await handleSelectedWalkAction();
+                                            } else if (mapRef.current) {
                                                 const center = mapRef.current.getCenter();
                                                 setTempPost({ lat: center.lat, lng: center.lng });
                                             }
                                         }}
+                                        disabled={isSpotReporting || isWalkActionSaving}
                                     >
-                                        📍 ここで決定
+                                        {isSpotReporting || isWalkActionSaving
+                                            ? '報告中...'
+                                            : isSelectingSafetyLocation
+                                                ? '🟢 この場所を安全と報告'
+                                                : isSelectingWalkLocation
+                                                    ? `${WALK_ACTION_META[pendingWalkAction.actionType]?.emoji || '🐾'} この場所で${pendingWalkAction.label}を記録`
+                                                : '📍 ここで決定'}
                                     </button>
+                                    {(isSelectingSafetyLocation || isSelectingWalkLocation) && (
+                                        <div style={{
+                                            backgroundColor: 'rgba(255,255,255,0.95)', color: '#4B5563',
+                                            fontSize: '0.78rem', lineHeight: 1.5, textAlign: 'center',
+                                            padding: '8px 12px', borderRadius: '12px',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                                        }}>
+                                            {isSelectingSafetyLocation
+                                                ? '🔒 公開位置は約100m単位にぼかして保存します'
+                                                : '🔒 この正確な場所は、あなたのお散歩ノートだけに保存します'}
+                                        </div>
+                                    )}
                                     <button
                                         className="btn card"
                                         style={{
@@ -862,7 +1113,11 @@ const MapPage = () => {
                                             borderRadius: '9999px', margin: 0, textAlign: 'center',
                                             border: 'none', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
                                         }}
-                                        onClick={() => setIsSelectingLocation(false)}
+                                        onClick={() => {
+                                            setIsSelectingLocation(false);
+                                            setIsSelectingSafetyLocation(false);
+                                            setPendingWalkAction(null);
+                                        }}
                                     >
                                         キャンセル
                                     </button>
@@ -1098,6 +1353,9 @@ const MapPage = () => {
                                     {/* ユーザー投稿ピン */}
                                     {displayPosts.map(post => {
                                         const hasThanked = Boolean(currentUserHash && post.thanks?.includes(currentUserHash));
+                                        const isOwner = Boolean(
+                                            currentUser && post.ownerUid === currentUser.uid
+                                        );
                                         const timeLimit = (filter === 'plant' && post.type === 'plant') ? 14 * 24 * 60 * 60 * 1000 : 48 * 60 * 60 * 1000;
                                         const isOld = post.timestamp ? (Date.now() - post.timestamp > timeLimit) : false;
 
@@ -1161,7 +1419,7 @@ const MapPage = () => {
                                                         >
                                                             💖 {post.thanks?.length || 0}
                                                         </button>
-                                                        {!post.resolved && (
+                                                        {isOwner && !post.resolved && (
                                                             <button
                                                                 onClick={() => handleResolve(post.id)}
                                                                 style={{
@@ -1173,7 +1431,7 @@ const MapPage = () => {
                                                                 👍 解決済に
                                                             </button>
                                                         )}
-                                                        {(!currentUserHash || post.userHash !== currentUserHash) && (
+                                                        {!isOwner && (
                                                             <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
@@ -1192,20 +1450,63 @@ const MapPage = () => {
                                                             </button>
                                                         )}
                                                     </div>
-                                                    <div style={{ textAlign: 'right', marginTop: '8px' }}>
+                                                    {isOwner && <div style={{ textAlign: 'right', marginTop: '8px' }}>
                                                         <button
                                                             onClick={() => deletePost(post.id, post.imagePath)}
                                                             style={{ background: 'none', border: 'none', color: '#EF4444', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.75rem' }}
                                                         >
                                                             投稿を削除
                                                         </button>
-                                                    </div>
+                                                    </div>}
                                                 </Popup>
                                             </Marker>
                                         );
                                     })}
                                 </>
                             )}
+
+                            {/* 本人だけに見える正確なお散歩アクション */}
+                            {displayWalkActions.map((action) => {
+                                const actionMeta = WALK_ACTION_META[action.actionType] || {
+                                    label: 'お散歩記録',
+                                    emoji: '🐾',
+                                };
+                                return (
+                                    <Marker
+                                        key={`walk-action-${action.id}`}
+                                        position={[action.lat, action.lng]}
+                                        icon={getMarkerIcon({ type: `walk_${action.actionType}` })}
+                                        ref={(ref) => {
+                                            if (ref) walkMarkerRefs.current.set(action.id, ref);
+                                            else walkMarkerRefs.current.delete(action.id);
+                                        }}
+                                    >
+                                        <Popup>
+                                            <div style={{ minWidth: '150px' }}>
+                                                <strong style={{ fontSize: '1rem' }}>
+                                                    {actionMeta.emoji} {actionMeta.label}
+                                                </strong>
+                                                <div style={{ marginTop: '5px', color: '#6B7280', fontSize: '0.78rem' }}>
+                                                    {getRelativeTime(action.timestamp)}
+                                                </div>
+                                                <div style={{ marginTop: '8px', color: '#047857', fontSize: '0.72rem' }}>
+                                                    🔒 この正確な場所は自分だけに表示されています
+                                                </div>
+                                                <button
+                                                    onClick={() => deleteWalkAction(action.id)}
+                                                    style={{
+                                                        marginTop: '10px', padding: 0, background: 'none',
+                                                        border: 'none', color: '#EF4444', cursor: 'pointer',
+                                                        fontSize: '0.72rem', textDecoration: 'underline',
+                                                    }}
+                                                >
+                                                    この記録を削除
+                                                </button>
+                                            </div>
+                                        </Popup>
+                                    </Marker>
+                                );
+                            })}
                         </MapContainer>
                     </>
                 )}
@@ -1237,14 +1538,16 @@ const MapPage = () => {
 
             {/* ── 投稿一覧ボトムシート ── */}
             <BottomSheet
-                open={!isSelectingLocation && !showQuickPostSheet}
+                open={!isSelectingAnyLocation && !showQuickPostSheet}
                 blocking={false}
                 snapPoints={({ maxHeight }) => [maxHeight * 0.3, maxHeight * 0.65]}
                 defaultSnap={({ snapPoints }) => snapPoints[0]}
                 header={
                     <div style={{ padding: '8px 16px 0 16px', maxWidth: '100vw', boxSizing: 'border-box' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.2rem' }}>地域の最新情報</h3>
+                            <h3 style={{ margin: 0, fontSize: '1.2rem' }}>
+                                {activeMapLayer === 'myMap' ? '私だけのお散歩ノート' : '地域の最新情報'}
+                            </h3>
                             <button
                                 onClick={handleRefresh}
                                 style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', color: 'var(--color-text-sub)' }}
@@ -1253,6 +1556,15 @@ const MapPage = () => {
                                 🔄
                             </button>
                         </div>
+                        {activeMapLayer === 'myMap' && (
+                            <div style={{
+                                margin: '-8px 0 12px', padding: '8px 10px', borderRadius: '10px',
+                                backgroundColor: '#ECFDF5', color: '#047857',
+                                fontSize: '0.75rem', lineHeight: 1.5,
+                            }}>
+                                🔒 お散歩アクションの正確な場所は、あなたにだけ表示されます。
+                            </div>
+                        )}
                         <div
                             className="map-top-filters"
                             data-rsbs-no-pan="true"
@@ -1271,14 +1583,70 @@ const MapPage = () => {
                         </div>
                     </div>
                 }
-                style={{ zIndex: 10, display: isSelectingLocation ? 'none' : 'block' }}
+                style={{ zIndex: 10, display: isSelectingAnyLocation ? 'none' : 'block' }}
             >
                 <div style={{ padding: '0 var(--spacing-md)', paddingBottom: '120px' }}>
                     <PullToRefresh onRefresh={handleRefresh} pullingContent="" refreshingContent={<div style={{ textAlign: 'center', padding: '10px', color: 'var(--color-text-sub)' }}>更新中...</div>}>
-                        {displayPosts.length > 0 ? (
+                        {(displayPosts.length > 0 || displayWalkActions.length > 0) ? (
                             <div style={{ display: 'grid', gap: 'var(--spacing-sm)' }}>
+                                {[...displayWalkActions]
+                                    .sort((a, b) => {
+                                        const bTime = b.timestamp?.toMillis?.() ?? b.timestamp ?? 0;
+                                        const aTime = a.timestamp?.toMillis?.() ?? a.timestamp ?? 0;
+                                        return bTime - aTime;
+                                    })
+                                    .map((action) => {
+                                        const actionMeta = WALK_ACTION_META[action.actionType] || {
+                                            label: 'お散歩記録',
+                                            emoji: '🐾',
+                                        };
+                                        return (
+                                            <div
+                                                key={`walk-list-${action.id}`}
+                                                className="card"
+                                                onClick={() => handleWalkActionClick(action)}
+                                                style={{
+                                                    padding: 'var(--spacing-sm) var(--spacing-md)', margin: 0,
+                                                    cursor: 'pointer', backgroundColor: '#F0FDF4',
+                                                    borderLeft: '4px solid #10B981',
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                                                    <div>
+                                                        <div style={{ fontWeight: 'bold', color: '#065F46' }}>
+                                                            {actionMeta.emoji} {actionMeta.label}
+                                                        </div>
+                                                        <div style={{ marginTop: '5px', fontSize: '0.72rem', color: '#047857' }}>
+                                                            🔒 正確な場所は自分だけに表示
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                                        <div style={{ fontSize: '0.75rem', color: '#6B7280', fontWeight: 'bold' }}>
+                                                            {getRelativeTime(action.timestamp)}
+                                                        </div>
+                                                        <button
+                                                            onClick={(event) => {
+                                                                event.stopPropagation();
+                                                                deleteWalkAction(action.id);
+                                                            }}
+                                                            style={{
+                                                                marginTop: '7px', padding: 0, background: 'none', border: 'none',
+                                                                color: '#EF4444', cursor: 'pointer', fontSize: '0.68rem',
+                                                                textDecoration: 'underline',
+                                                            }}
+                                                        >
+                                                            削除
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 {[...displayPosts].sort((a, b) => b.timestamp - a.timestamp).map(post => {
                                     const hasThanked = Boolean(currentUserHash && post.thanks?.includes(currentUserHash));
+                                    const isOwner = Boolean(
+                                        currentUser && post.ownerUid === currentUser.uid
+                                    );
                                     const timeLimit = (filter === 'plant' && post.type === 'plant') ? 14 * 24 * 60 * 60 * 1000 : 48 * 60 * 60 * 1000;
                                     const isOld = post.timestamp ? (Date.now() - post.timestamp > timeLimit) : false;
                                     return (
@@ -1320,7 +1688,7 @@ const MapPage = () => {
                                                         {post.imageUrl && <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>📷 写真あり</span>}
                                                     </div>
                                                     <div style={{ display: 'flex', gap: '8px' }}>
-                                                        {(!currentUserHash || post.userHash !== currentUserHash) && (
+                                                        {!isOwner && (
                                                             <button
                                                                 onClick={(e) => { e.stopPropagation(); handleSavePost(post.id, post.savedBy); }}
                                                                 style={{
@@ -1357,7 +1725,9 @@ const MapPage = () => {
                             </div>
                         ) : (
                             <p style={{ color: 'var(--color-text-sub)', textAlign: 'center', padding: 'var(--spacing-lg) 0' }}>
-                                周辺の投稿はまだありません。
+                                {activeMapLayer === 'myMap'
+                                    ? '自分のお散歩記録や投稿はまだありません。'
+                                    : '周辺の投稿はまだありません。'}
                             </p>
                         )}
                     </PullToRefresh>
@@ -1439,6 +1809,19 @@ const MapPage = () => {
                                 {isSubmitting ? '送信中...' : '🚀 このまま投稿する'}
                             </button>
 
+                            <button
+                                onClick={() => startMapLocationSelection({ quickPost: quickPostData })}
+                                disabled={isSubmitting}
+                                style={{
+                                    width: '100%', padding: '16px', borderRadius: '16px',
+                                    border: '1px solid #FDBA74', backgroundColor: '#FFF7ED', color: '#C2410C',
+                                    fontSize: '1.05rem', fontWeight: 'bold', cursor: 'pointer',
+                                    opacity: isSubmitting ? 0.7 : 1
+                                }}
+                            >
+                                🗺️ 地図から投稿場所を選ぶ
+                            </button>
+
                             <div style={{ position: 'relative', margin: '16px 0', borderTop: '2px dashed #E5E7EB' }}></div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1501,6 +1884,7 @@ const MapPage = () => {
             <WalkControllerSheet
                 isOpen={isWalkRecording}
                 onClose={() => setIsWalkRecording(false)}
+                onRequestMapSelection={startWalkLocationSelection}
                 memberNumber={memberNumber}
             />
         </div>

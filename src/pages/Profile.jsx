@@ -9,10 +9,11 @@ import toast from 'react-hot-toast';
 import RouteEditor from '../components/RouteEditor';
 
 const Profile = () => {
-    const { currentUser, memberNumber, linkWithGoogle, loginWithGoogle, loginAnonymously, logout } = useAuth();
+    const { currentUser, linkWithGoogle, loginWithGoogle, loginAnonymously, logout } = useAuth();
 
     const [userPosts, setUserPosts] = useState([]);
     const [thanksCount, setThanksCount] = useState(0);
+    const [walkActionCount, setWalkActionCount] = useState(0);
     const [isLoggingIn, setIsLoggingIn] = useState(false);
 
     const [profile, setProfile] = useState(() => {
@@ -60,7 +61,7 @@ const Profile = () => {
                         if (currentUser.isAnonymous) {
                             // Default profile for apprentices
                             setProfile({
-                                name: '見習い隊員',
+                                name: 'ゲスト隊員',
                                 species: 'other',
                                 size: '',
                                 breed: '未登録',
@@ -69,7 +70,7 @@ const Profile = () => {
                                 owner: '未登録',
                                 phone: '未登録',
                                 vet: '未登録',
-                                notes: '※このプロフィールは仮のものです。「編集」ボタンからGoogle連携を行うと、自分のペットの詳しい情報を登録・保存できるようになります。',
+                                notes: '※ゲストの仮プロフィールです。Google連携すると、詳しいプロフィールやMYお散歩ルートを保存し、機種変更後も引き継げます。',
                                 photoUrl: ''
                             });
                             setIsEditing(false);
@@ -85,9 +86,9 @@ const Profile = () => {
 
     useEffect(() => {
         const fetchUserPosts = async () => {
-            if (currentUser && memberNumber) {
+            if (currentUser) {
                 try {
-                    const q = query(collection(db, 'map_pins'), where('memberNumber', '==', memberNumber));
+                    const q = query(collection(db, 'map_pins'), where('ownerUid', '==', currentUser.uid));
                     const querySnapshot = await getDocs(q);
                     const posts = [];
                     let totalThanks = 0;
@@ -107,7 +108,27 @@ const Profile = () => {
             }
         };
         fetchUserPosts();
-    }, [currentUser, memberNumber]);
+    }, [currentUser]);
+
+    useEffect(() => {
+        if (!currentUser) {
+            setWalkActionCount(0);
+            return undefined;
+        }
+
+        const ownWalkActions = query(
+            collection(db, 'walkActions'),
+            where('uid', '==', currentUser.uid)
+        );
+        const unsubscribe = onSnapshot(ownWalkActions, (snapshot) => {
+            setWalkActionCount(snapshot.size);
+        }, (error) => {
+            console.error('Error fetching walk action count:', error);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
+
     // MYルート一覧をリアルタイム購読
     useEffect(() => {
         if (!currentUser || currentUser.isAnonymous) return;
@@ -132,6 +153,10 @@ const Profile = () => {
     };
 
     const openNewRoute = () => {
+        if (currentUser?.isAnonymous) {
+            toast('お散歩ルートの保存は、Google連携で追加できます。', { icon: '🔒' });
+            return;
+        }
         setRouteEditorState({ open: true, editingRoute: null });
     };
 
@@ -169,7 +194,7 @@ const Profile = () => {
                                         await loginAnonymously();
                                     } catch (error) {
                                         console.error('Anonymous login error:', error);
-                                        alert('お試しログインに失敗しました。');
+                                        alert('ゲストとして開始できませんでした。');
                                         setIsLoggingIn(false);
                                     }
                                 }}
@@ -185,7 +210,7 @@ const Profile = () => {
                                     letterSpacing: '0.02em',
                                 }}
                             >
-                                🐶 お試しで始める（登録不要）
+                                🐶 ゲストとして始める（登録不要）
                             </button>
                             <p style={{ fontSize: '0.75rem', color: '#9CA3AF', margin: '-4px 0 4px', textAlign: 'center' }}>
                                 ※ 後からいつでもGoogleアカウントと連携できます
@@ -462,87 +487,41 @@ const Profile = () => {
     return (
         <>
         <div className="profile-page">
-            {currentUser?.isAnonymous && (() => {
-                const creationTime = currentUser.metadata?.creationTime
-                    ? new Date(currentUser.metadata.creationTime)
-                    : null;
-                const daysSince = creationTime
-                    ? Math.floor((Date.now() - creationTime.getTime()) / (1000 * 60 * 60 * 24))
-                    : 0;
-                const isNearExpiry = daysSince >= 20;
-
-                return isNearExpiry ? (
-                    // 20日以上経過 → オレンジの促進アラート
-                    <div style={{
-                        background: 'linear-gradient(135deg, #FFF7ED 0%, #FEF3C7 100%)',
-                        border: '1.5px solid #FDBA74',
-                        borderRadius: '14px',
-                        padding: '16px',
-                        marginBottom: 'var(--spacing-md)',
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                            <span style={{ fontSize: '1.2rem' }}>⚠️</span>
-                            <span style={{ color: '#C2410C', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                                お試し期間があと少しで終了します
-                            </span>
+            {currentUser?.isAnonymous && (
+                <div style={{
+                    background: 'linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%)',
+                    border: '1.5px solid #93C5FD',
+                    borderRadius: '14px',
+                    padding: '14px 16px',
+                    marginBottom: 'var(--spacing-md)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
+                }}>
+                    <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#1D4ED8', marginBottom: '4px' }}>
+                            🐾 ゲストモードで利用中
                         </div>
-                        <p style={{ fontSize: '0.82rem', color: '#92400E', margin: '0 0 12px', lineHeight: 1.6 }}>
-                            これまでの記録を残すために、無料のGoogle連携をお願いします！
-                        </p>
-                        <button
-                            onClick={async () => {
-                                try { await linkWithGoogle(); }
-                                catch (e) { console.error(e); alert('Google連携に失敗しました。'); }
-                            }}
-                            style={{
-                                width: '100%', padding: '11px 16px',
-                                fontSize: '0.9rem', fontWeight: 'bold',
-                                borderRadius: '10px', border: 'none',
-                                backgroundColor: '#F97316', color: 'white',
-                                cursor: 'pointer',
-                                boxShadow: '0 3px 10px rgba(249,115,22,0.35)',
-                            }}
-                        >
-                            🔒 今すぐデータを守る（無料・Google連携）
-                        </button>
-                    </div>
-                ) : (
-                    // 20日未満 → 優しい案内バナー
-                    <div style={{
-                        background: 'linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%)',
-                        border: '1.5px solid #93C5FD',
-                        borderRadius: '14px',
-                        padding: '14px 16px',
-                        marginBottom: 'var(--spacing-md)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
-                    }}>
-                        <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#1D4ED8', marginBottom: '4px' }}>
-                                🐾 お試しモードでご利用中
-                            </div>
-                            <div style={{ fontSize: '0.75rem', color: '#3B82F6' }}>
-                                Googleと連携するとデータが永久に保存されます
-                            </div>
+                        <div style={{ fontSize: '0.75rem', color: '#3B82F6', lineHeight: 1.5 }}>
+                            投稿・お散歩記録・マイマップは登録なしで使えます。Google連携で詳しいプロフィール・MYルート・機種変更時の引き継ぎが追加されます。
                         </div>
-                        <button
-                            onClick={async () => {
-                                try { await linkWithGoogle(); }
-                                catch (e) { console.error(e); alert('Google連携に失敗しました。'); }
-                            }}
-                            style={{
-                                padding: '9px 14px', flexShrink: 0,
-                                fontSize: '0.78rem', fontWeight: 'bold',
-                                borderRadius: '10px', border: 'none',
-                                backgroundColor: '#2563EB', color: 'white',
-                                cursor: 'pointer', whiteSpace: 'nowrap',
-                                boxShadow: '0 2px 6px rgba(37,99,235,0.3)',
-                            }}
-                        >
-                            無料で保存する
-                        </button>
                     </div>
-                );
-            })()}
+                    <button
+                        onClick={async () => {
+                            try { await linkWithGoogle(); }
+                            catch (e) { console.error(e); alert('Google連携に失敗しました。'); }
+                        }}
+                        style={{
+                            padding: '9px 14px', flexShrink: 0,
+                            fontSize: '0.78rem', fontWeight: 'bold',
+                            borderRadius: '10px', border: 'none',
+                            backgroundColor: '#2563EB', color: 'white',
+                            cursor: 'pointer', whiteSpace: 'nowrap',
+                            boxShadow: '0 2px 6px rgba(37,99,235,0.3)',
+                        }}
+                    >
+                        機能を追加
+                    </button>
+                </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
                 <h2 style={{ margin: 0 }}>マイ・ペット手帳</h2>
                 <button
@@ -691,13 +670,14 @@ const Profile = () => {
                         onClick={openNewRoute}
                         style={{
                             padding: '7px 14px', borderRadius: '20px', border: 'none',
-                            backgroundColor: '#22C55E', color: 'white',
+                            backgroundColor: currentUser?.isAnonymous ? '#64748B' : '#22C55E', color: 'white',
                             fontWeight: 'bold', fontSize: '0.82rem',
                             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
-                            boxShadow: '0 2px 4px rgba(34,197,94,0.3)',
+                            boxShadow: currentUser?.isAnonymous ? 'none' : '0 2px 4px rgba(34,197,94,0.3)',
                         }}
                     >
-                        <span style={{ fontSize: '1rem' }}>+</span> 新しいコースを登録
+                        <span style={{ fontSize: '1rem' }}>{currentUser?.isAnonymous ? '🔒' : '+'}</span>
+                        {currentUser?.isAnonymous ? 'Google連携でルート保存' : '新しいコースを登録'}
                     </button>
                 </div>
 
@@ -705,7 +685,11 @@ const Profile = () => {
                     <div style={{ padding: '16px', backgroundColor: '#F0FDF4', borderRadius: '10px', border: '1.5px dashed #86EFAC', textAlign: 'center' }}>
                         <div style={{ fontSize: '1.8rem', marginBottom: '6px' }}>🗺️</div>
                         <div style={{ fontSize: '0.85rem', color: '#4B5563' }}>まだルートが登録されていません</div>
-                        <div style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '4px' }}>「＋ 新しいコースを登録」から安心な散歩ルートを登録しよう</div>
+                        <div style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '4px' }}>
+                            {currentUser?.isAnonymous
+                                ? 'Google連携すると、自分だけのお散歩ルートを保存できます'
+                                : '「＋ 新しいコースを登録」から安心な散歩ルートを登録しよう'}
+                        </div>
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -788,14 +772,20 @@ const Profile = () => {
                     <span style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>ACTIVITY</span>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
+                    <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', padding: '12px 8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🐕</div>
+                        <div style={{ fontSize: '0.8rem', color: '#15803D' }}>お散歩アクション</div>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#15803D' }}>{walkActionCount} <span style={{ fontSize: '0.9rem', color: 'var(--color-text-base)' }}>回</span></div>
+                    </div>
+
+                    <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px 8px', textAlign: 'center' }}>
                         <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🐾</div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)' }}>発見したスポット</div>
                         <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--color-primary)' }}>{userPosts.length} <span style={{ fontSize: '0.9rem', color: 'var(--color-text-base)' }}>件</span></div>
                     </div>
 
-                    <div style={{ flex: 1, backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                    <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px 8px', textAlign: 'center' }}>
                         <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>💖</div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)' }}>もらったありがとう</div>
                         <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#DB2777' }}>{thanksCount} <span style={{ fontSize: '0.9rem', color: 'var(--color-text-base)' }}>件</span></div>

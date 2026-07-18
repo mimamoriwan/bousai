@@ -42,7 +42,7 @@ const Layout = () => {
                         <span style={{ fontSize: '0.75rem', lineHeight: '1', fontWeight: 'bold' }}>
                             {currentUser && !currentUser.isAnonymous && memberNumber
                                 ? `No.${String(memberNumber).padStart(5, '0')}`
-                                : '見習い'}
+                                : 'ゲスト'}
                         </span>
                     </div>
                 </div>

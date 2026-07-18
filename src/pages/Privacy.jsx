@@ -1,5 +1,3 @@
-import React from 'react';
-
 const PrivacyPage = () => {
     return (
         <div className="card" style={{ margin: 'var(--spacing-md)', paddingBottom: 'var(--spacing-xl)' }}>

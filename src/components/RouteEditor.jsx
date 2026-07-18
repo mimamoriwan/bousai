@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Polyline, useMapEvents } from 'react-leaflet';
 import { db } from '../firebase';
 import {
-    collection, addDoc, doc, setDoc, serverTimestamp,
+    collection, addDoc, doc, setDoc,
 } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import { applyPrivacyFilter, totalRouteDistance } from '../utils/routeUtils';
+import { applyPrivacyFilter } from '../utils/routeUtils';
 
 // ──────────────────────────────────────────────────────────────
 // マップクリックでポイントを追加するコンポーネント

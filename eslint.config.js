@@ -5,7 +5,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist', 'dev-dist'] },
+  { ignores: ['dist', 'dist-local', 'dev-dist', 'functions/**', 'test_auth.js'] },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {

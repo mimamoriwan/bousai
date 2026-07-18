@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, storage } from '../firebase';
 import {
-    collection, addDoc, deleteDoc, doc, onSnapshot, query,
+    collection, deleteDoc, doc, onSnapshot, query,
     updateDoc, arrayUnion, arrayRemove, getDocs, where, Timestamp
 } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
@@ -15,27 +15,87 @@ export const useMapData = () => {
     const { currentUser, currentUserHash } = useAuth();
     const [userPosts, setUserPosts] = useState([]);
     const [safetyReports, setSafetyReports] = useState([]);
+    const [walkActionSnapshot, setWalkActionSnapshot] = useState({ uid: null, items: [] });
+    const walkActions = currentUser && walkActionSnapshot.uid === currentUser.uid
+        ? walkActionSnapshot.items
+        : [];
 
-    // map_pins のリアルタイムリスナー
+    const normalizePins = (snapshot) => snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            ...data,
+            visibility: data.visibility || 'public',
+            savedBy: Array.isArray(data.savedBy) ? data.savedBy : [],
+            thanks: Array.isArray(data.thanks) ? data.thanks : []
+        };
+    });
+
+    // 公開投稿と自分の非公開投稿だけを購読する
     useEffect(() => {
-        const q = query(collection(db, 'map_pins'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const pins = snapshot.docs.map((docSnap) => {
-                const data = docSnap.data();
-                return {
-                    id: docSnap.id,
-                    ...data,
-                    visibility: data.visibility || 'public',
-                    savedBy: Array.isArray(data.savedBy) ? data.savedBy : [],
-                    thanks: Array.isArray(data.thanks) ? data.thanks : []
-                };
-            });
-            setUserPosts(pins);
+        let publicPins = [];
+        let privatePins = [];
+        const syncPins = () => {
+            const merged = new Map(
+                [...publicPins, ...privatePins].map((pin) => [pin.id, pin])
+            );
+            setUserPosts([...merged.values()]);
+        };
+
+        const publicQuery = query(
+            collection(db, 'map_pins'),
+            where('visibility', '==', 'public')
+        );
+        const unsubscribePublic = onSnapshot(publicQuery, (snapshot) => {
+            publicPins = normalizePins(snapshot);
+            syncPins();
         }, (error) => {
-            console.error('map_pins 取得エラー:', error);
+            console.error('公開map_pins 取得エラー:', error);
         });
+
+        let unsubscribePrivate = () => {};
+        if (currentUser) {
+            const privateQuery = query(
+                collection(db, 'map_pins'),
+                where('ownerUid', '==', currentUser.uid),
+                where('visibility', '==', 'private')
+            );
+            unsubscribePrivate = onSnapshot(privateQuery, (snapshot) => {
+                privatePins = normalizePins(snapshot);
+                syncPins();
+            }, (error) => {
+                console.error('自分の非公開map_pins 取得エラー:', error);
+            });
+        }
+
+        return () => {
+            unsubscribePublic();
+            unsubscribePrivate();
+        };
+    }, [currentUser]);
+
+    // 正確な位置を含むお散歩アクションは、本人の記録だけを購読する
+    useEffect(() => {
+        if (!currentUser) return undefined;
+
+        const ownActionsQuery = query(
+            collection(db, 'walkActions'),
+            where('uid', '==', currentUser.uid)
+        );
+        const unsubscribe = onSnapshot(ownActionsQuery, (snapshot) => {
+            setWalkActionSnapshot({
+                uid: currentUser.uid,
+                items: snapshot.docs.map((docSnap) => ({
+                    id: docSnap.id,
+                    ...docSnap.data(),
+                })),
+            });
+        }, (error) => {
+            console.error('自分のお散歩記録取得エラー:', error);
+        });
+
         return () => unsubscribe();
-    }, []);
+    }, [currentUser]);
 
     // safetyReports の過去6時間分をリアルタイムで取得
     useEffect(() => {
@@ -52,21 +112,42 @@ export const useMapData = () => {
         return () => unsubscribe();
     }, []);
 
-    /** map_pins を手動で最新取得（プルトゥリフレッシュ用） */
+    /** map_pins と自分のお散歩記録を手動で最新取得（プルトゥリフレッシュ用） */
     const fetchLatestPins = async () => {
         try {
-            const snapshot = await getDocs(query(collection(db, 'map_pins')));
-            const pins = snapshot.docs.map((docSnap) => {
-                const data = docSnap.data();
-                return {
-                    id: docSnap.id,
-                    ...data,
-                    visibility: data.visibility || 'public',
-                    savedBy: Array.isArray(data.savedBy) ? data.savedBy : [],
-                    thanks: Array.isArray(data.thanks) ? data.thanks : []
-                };
-            });
-            setUserPosts(pins);
+            const pinRequests = [getDocs(query(
+                collection(db, 'map_pins'),
+                where('visibility', '==', 'public')
+            ))];
+            if (currentUser) {
+                pinRequests.push(getDocs(query(
+                    collection(db, 'map_pins'),
+                    where('ownerUid', '==', currentUser.uid),
+                    where('visibility', '==', 'private')
+                )));
+            }
+            const [snapshots, walkSnapshot] = await Promise.all([
+                Promise.all(pinRequests),
+                currentUser
+                    ? getDocs(query(
+                        collection(db, 'walkActions'),
+                        where('uid', '==', currentUser.uid)
+                    ))
+                    : Promise.resolve(null),
+            ]);
+            const merged = new Map(
+                snapshots.flatMap(normalizePins).map((pin) => [pin.id, pin])
+            );
+            setUserPosts([...merged.values()]);
+            if (walkSnapshot) {
+                setWalkActionSnapshot({
+                    uid: currentUser.uid,
+                    items: walkSnapshot.docs.map((docSnap) => ({
+                        id: docSnap.id,
+                        ...docSnap.data(),
+                    })),
+                });
+            }
         } catch (error) {
             console.error('手動フェッチエラー:', error);
         }
@@ -138,13 +219,26 @@ export const useMapData = () => {
         }
     };
 
+    /** 本人のお散歩アクションを削除 */
+    const deleteWalkAction = async (id) => {
+        if (!window.confirm('このお散歩記録を削除しますか？')) return;
+        try {
+            await deleteDoc(doc(db, 'walkActions', id));
+        } catch (error) {
+            console.error('お散歩記録削除エラー:', error);
+            alert('お散歩記録の削除に失敗しました。');
+        }
+    };
+
     return {
         userPosts,
         safetyReports,
+        walkActions,
         fetchLatestPins,
         handleThanks,
         handleSavePost,
         handleResolve,
         deletePost,
+        deleteWalkAction,
     };
 };

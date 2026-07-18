@@ -1,10 +1,12 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
+import { connectAuthEmulator, getAuth, GoogleAuthProvider } from "firebase/auth";
+
+const useFirebaseEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
 
 // Your web app's Firebase configuration
-const firebaseConfig = {
+const productionFirebaseConfig = {
     apiKey: "AIzaSyARiM_S2bfzS_3EkXYaiisFdWGmxj2dtzk",
     authDomain: "mimamori-wan.web.app",
     projectId: "tsukuba-pet-bousai",
@@ -12,6 +14,17 @@ const firebaseConfig = {
     messagingSenderId: "491489046094",
     appId: "1:491489046094:web:cec28b0f6da609972f9d1f"
 };
+
+const localFirebaseConfig = {
+    ...productionFirebaseConfig,
+    authDomain: "demo-tsukuba-pet-bousai.firebaseapp.com",
+    projectId: "demo-tsukuba-pet-bousai",
+    storageBucket: "demo-tsukuba-pet-bousai.firebasestorage.app",
+};
+
+const firebaseConfig = useFirebaseEmulators
+    ? localFirebaseConfig
+    : productionFirebaseConfig;
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -25,3 +38,10 @@ export const storage = getStorage(app);
 // Initialize Firebase Authentication and get a reference to the service
 export const auth = getAuth(app);
 export const provider = new GoogleAuthProvider();
+
+if (useFirebaseEmulators && !globalThis.__MIMAMORI_FIREBASE_EMULATORS_CONNECTED__) {
+    connectAuthEmulator(auth, 'http://127.0.0.1:9106', { disableWarnings: true });
+    connectFirestoreEmulator(db, '127.0.0.1', 8086);
+    connectStorageEmulator(storage, '127.0.0.1', 9206);
+    globalThis.__MIMAMORI_FIREBASE_EMULATORS_CONNECTED__ = true;
+}

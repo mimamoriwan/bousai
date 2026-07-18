@@ -1,43 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import './InstallPrompt.css';
 
 const InstallPrompt = () => {
-    const [isVisible, setIsVisible] = useState(false);
-    const [os, setOs] = useState('');
-    const [copied, setCopied] = useState(false);
-
-    useEffect(() => {
-        // Prevent showing if already in standalone mode (PWA installed)
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-        if (isStandalone) return;
-
+    // 案内表示は現在停止中。再開時は表示条件を専用フックとして追加する。
+    const [isVisible] = useState(false);
+    const [os] = useState(() => {
         const ua = navigator.userAgent || navigator.vendor || window.opera;
-
-        // OS Detection
         const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
-        const isAndroid = /android/i.test(ua);
-
-        if (isIOS) setOs('ios');
-        else if (isAndroid) setOs('android');
-        else setOs('other'); // Usually desktop, we don't block them unless we want to. Let's not.
-
-        // In-App Browser keywords
-        const inAppKeywords = [
-            'Line', 'Instagram', 'FBAN', 'FBAV', 'Twitter', 'MicroMessenger', 'Snapchat'
-        ];
-        const isInApp = inAppKeywords.some(keyword => new RegExp(keyword, 'i').test(ua));
-
-        // iOS Non-Safari browsers (Chrome, Firefox, Edge, etc. on iOS)
-        // Note: Safari itself has 'Safari' but so does Chrome on iOS. Chrome has 'CriOS'. Firefox has 'FxiOS'.
-        const isIOSNonSafari = isIOS && /CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo/i.test(ua);
-
-        if (isIOS || isAndroid) { // Only prompt on mobile devices
-            if (isInApp || isIOSNonSafari) {
-                // TEMPORARILY DISABLED FOR TESTING
-                // setIsVisible(true);
-            }
-        }
-    }, []);
+        if (isIOS) return 'ios';
+        if (/android/i.test(ua)) return 'android';
+        return 'other';
+    });
+    const [copied, setCopied] = useState(false);
 
     const handleCopyUrl = async () => {
         try {
