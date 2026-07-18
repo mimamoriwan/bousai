@@ -89,8 +89,7 @@ service cloud.firestore {
           && changesOnly(['resolved'])
           && request.resource.data.resolved is bool)
         || (changesOnly(['thanks']) && validInteraction('thanks'))
-        || (isGoogleUser()
-          && changesOnly(['savedBy'])
+        || (changesOnly(['savedBy'])
           && validInteraction('savedBy'))
       );
 

@@ -5,6 +5,7 @@ import {
     signInAnonymously,
 } from 'firebase/auth';
 import {
+    arrayRemove,
     arrayUnion,
     collection,
     connectFirestoreEmulator,
@@ -117,6 +118,12 @@ try {
     await assertRejected('非公開投稿の未ログイン読み取りを拒否', () =>
         getDoc(doc(reader.db, 'map_pins', privatePinRef.id))
     );
+    const ownPrivatePin = await getDoc(privatePinRef);
+    if (!ownPrivatePin.exists()) throw new Error('ゲスト本人が非公開投稿を読めませんでした。');
+    console.log('✓ ゲスト本人の非公開投稿読み取り');
+    await assertRejected('他のゲストによる非公開投稿の読み取りを拒否', () =>
+        getDoc(doc(attacker.db, 'map_pins', privatePinRef.id))
+    );
     await assertRejected('他人による解決済み変更を拒否', () =>
         updateDoc(doc(attacker.db, 'map_pins', publicPinRef.id), { resolved: true })
     );
@@ -129,9 +136,22 @@ try {
     });
     console.log('✓ ゲストによる「ありがとう」追加');
 
-    await assertRejected('匿名ゲストのマイマップ保存を拒否', () =>
-        updateDoc(doc(attacker.db, 'map_pins', publicPinRef.id), {
-            savedBy: arrayUnion(`hash-${attackerUid}`),
+    const guestHash = `hash-${attackerUid}`;
+    await updateDoc(doc(attacker.db, 'map_pins', publicPinRef.id), {
+        savedBy: arrayUnion(guestHash),
+    });
+    const guestSavedPin = await getDoc(doc(attacker.db, 'map_pins', publicPinRef.id));
+    if (!guestSavedPin.data()?.savedBy?.includes(guestHash)) {
+        throw new Error('ゲストのマイマップ保存が反映されませんでした。');
+    }
+    console.log('✓ ゲストによるマイマップ保存');
+    await updateDoc(doc(attacker.db, 'map_pins', publicPinRef.id), {
+        savedBy: arrayRemove(guestHash),
+    });
+    console.log('✓ ゲストによるマイマップ保存解除');
+    await assertRejected('未ログイン利用者によるマイマップ保存を拒否', () =>
+        updateDoc(doc(reader.db, 'map_pins', publicPinRef.id), {
+            savedBy: arrayUnion('unauthenticated-reader'),
         })
     );
 

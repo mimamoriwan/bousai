@@ -1189,17 +1189,11 @@ const MapPage = () => {
                                                             🌍 みんなに公開 <span style={{ fontSize: '0.8rem', color: '#6B7280', fontWeight: 'normal' }}>（48時間で消えます）</span>
                                                         </span>
                                                     </label>
-                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', opacity: (currentUser && currentUser.isAnonymous) ? 0.6 : 1 }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                                         <input
                                                             type="radio" name="visibility" value="private"
                                                             checked={postForm.visibility === 'private'}
-                                                            onChange={() => {
-                                                                if (currentUser && currentUser.isAnonymous) {
-                                                                    alert('自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）');
-                                                                    return;
-                                                                }
-                                                                setPostForm({ ...postForm, visibility: 'private' });
-                                                            }}
+                                                            onChange={() => setPostForm({ ...postForm, visibility: 'private' })}
                                                             style={{ width: '18px', height: '18px', accentColor: 'var(--color-primary)' }}
                                                         />
                                                         <span style={{ fontSize: '0.95rem', fontWeight: postForm.visibility === 'private' ? 'bold' : 'normal' }}>
