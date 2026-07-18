@@ -1,10 +1,13 @@
 import { deleteApp, initializeApp } from 'firebase/app';
 import {
     connectAuthEmulator,
+    EmailAuthProvider,
     getAuth,
+    linkWithCredential,
     signInAnonymously,
 } from 'firebase/auth';
 import {
+    arrayRemove,
     arrayUnion,
     collection,
     connectFirestoreEmulator,
@@ -58,6 +61,7 @@ const createClient = (name, withAuth = true) => {
 const owner = createClient('owner');
 const attacker = createClient('attacker');
 const reader = createClient('reader', false);
+const linkGuest = createClient('link-guest');
 
 const assertRejected = async (label, operation) => {
     try {
@@ -96,6 +100,8 @@ let walkActionRef;
 let invalidWalkActionRef;
 let safetyReportRef;
 let imageRef;
+let linkedPrivatePinRef;
+let linkedWalkActionRef;
 
 try {
     const ownerCredential = await signInAnonymously(owner.auth);
@@ -117,6 +123,12 @@ try {
     await assertRejected('非公開投稿の未ログイン読み取りを拒否', () =>
         getDoc(doc(reader.db, 'map_pins', privatePinRef.id))
     );
+    const ownPrivatePin = await getDoc(privatePinRef);
+    if (!ownPrivatePin.exists()) throw new Error('ゲスト本人が非公開投稿を読めませんでした。');
+    console.log('✓ ゲスト本人の非公開投稿読み取り');
+    await assertRejected('他のゲストによる非公開投稿の読み取りを拒否', () =>
+        getDoc(doc(attacker.db, 'map_pins', privatePinRef.id))
+    );
     await assertRejected('他人による解決済み変更を拒否', () =>
         updateDoc(doc(attacker.db, 'map_pins', publicPinRef.id), { resolved: true })
     );
@@ -129,9 +141,22 @@ try {
     });
     console.log('✓ ゲストによる「ありがとう」追加');
 
-    await assertRejected('匿名ゲストのマイマップ保存を拒否', () =>
-        updateDoc(doc(attacker.db, 'map_pins', publicPinRef.id), {
-            savedBy: arrayUnion(`hash-${attackerUid}`),
+    const guestHash = `hash-${attackerUid}`;
+    await updateDoc(doc(attacker.db, 'map_pins', publicPinRef.id), {
+        savedBy: arrayUnion(guestHash),
+    });
+    const guestSavedPin = await getDoc(doc(attacker.db, 'map_pins', publicPinRef.id));
+    if (!guestSavedPin.data()?.savedBy?.includes(guestHash)) {
+        throw new Error('ゲストのマイマップ保存が反映されませんでした。');
+    }
+    console.log('✓ ゲストによるマイマップ保存');
+    await updateDoc(doc(attacker.db, 'map_pins', publicPinRef.id), {
+        savedBy: arrayRemove(guestHash),
+    });
+    console.log('✓ ゲストによるマイマップ保存解除');
+    await assertRejected('未ログイン利用者によるマイマップ保存を拒否', () =>
+        updateDoc(doc(reader.db, 'map_pins', publicPinRef.id), {
+            savedBy: arrayUnion('unauthenticated-reader'),
         })
     );
 
@@ -223,17 +248,55 @@ try {
         )
     );
 
+    const linkGuestCredential = await signInAnonymously(linkGuest.auth);
+    const guestUidBeforeLink = linkGuestCredential.user.uid;
+    linkedPrivatePinRef = doc(linkGuest.db, 'map_pins', `linked-private-${suffix}`);
+    linkedWalkActionRef = doc(linkGuest.db, 'walkActions', `linked-walk-${suffix}`);
+    await setDoc(linkedPrivatePinRef, mapPinData(guestUidBeforeLink, 'private'));
+    await setDoc(linkedWalkActionRef, {
+        uid: guestUidBeforeLink,
+        actionType: 'sniff',
+        lat: 35.6722,
+        lng: 139.7364,
+        timestamp: Date.now(),
+        createdAt: serverTimestamp(),
+    });
+
+    const emailCredential = EmailAuthProvider.credential(
+        `guest-link-${suffix}@example.com`,
+        'guest-link-test-password'
+    );
+    const linkedCredential = await linkWithCredential(
+        linkGuestCredential.user,
+        emailCredential
+    );
+    if (linkedCredential.user.uid !== guestUidBeforeLink || linkedCredential.user.isAnonymous) {
+        throw new Error('アカウント連携でゲストUIDが維持されませんでした。');
+    }
+
+    const [linkedPrivatePin, linkedWalkAction] = await Promise.all([
+        getDoc(linkedPrivatePinRef),
+        getDoc(linkedWalkActionRef),
+    ]);
+    if (!linkedPrivatePin.exists() || !linkedWalkAction.exists()) {
+        throw new Error('アカウント連携前のゲスト記録を連携後に読めませんでした。');
+    }
+    console.log('✓ アカウント連携後もゲストUIDと記録を維持');
+
     console.log('\nFirebase Emulatorの権限テストはすべて成功しました。');
 } finally {
     if (imageRef) await deleteObject(imageRef).catch(() => {});
     if (invalidWalkActionRef) await deleteDoc(invalidWalkActionRef).catch(() => {});
     if (safetyReportRef) await deleteDoc(safetyReportRef).catch(() => {});
     if (walkActionRef) await deleteDoc(walkActionRef).catch(() => {});
+    if (linkedPrivatePinRef) await deleteDoc(linkedPrivatePinRef).catch(() => {});
+    if (linkedWalkActionRef) await deleteDoc(linkedWalkActionRef).catch(() => {});
     if (privatePinRef) await deleteDoc(privatePinRef).catch(() => {});
     if (publicPinRef) await deleteDoc(publicPinRef).catch(() => {});
     await Promise.all([
         deleteApp(owner.app),
         deleteApp(attacker.app),
         deleteApp(reader.app),
+        deleteApp(linkGuest.app),
     ]);
 }

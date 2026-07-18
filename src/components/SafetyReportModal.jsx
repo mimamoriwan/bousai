@@ -122,22 +122,22 @@ const SafetyReportModal = ({ currentUser, onClose }) => {
                     ) : isAnonymous ? (
                         // 匿名ユーザー向け
                         <div style={{ textAlign: 'center', padding: '16px' }}>
-                            <div style={{ fontSize: '2rem', marginBottom: '12px' }}>🔒</div>
+                            <div style={{ fontSize: '2rem', marginBottom: '12px' }}>🐾</div>
                             <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-                                この機能はGoogle登録ユーザー限定です
+                                MYルートからの報告はGoogle連携で追加できます
                             </div>
                             <div style={{ fontSize: '0.82rem', color: '#6B7280', marginBottom: '20px' }}>
-                                安全報告機能を利用するには、マイページからGoogleアカウントで登録してください。
+                                ゲストでも「今ここ安全！」から、現在地または地図で選んだ場所の安全を報告できます。
                             </div>
                             <button
-                                onClick={() => { onClose(); navigate('/profile'); }}
+                                onClick={onClose}
                                 style={{
                                     padding: '12px 24px', borderRadius: '12px', border: 'none',
                                     backgroundColor: '#22C55E', color: 'white',
                                     fontWeight: 'bold', fontSize: '0.95rem', cursor: 'pointer',
                                 }}
                             >
-                                マイページへ →
+                                マップに戻る
                             </button>
                         </div>
                     ) : routes.length === 0 ? (

@@ -9,7 +9,15 @@ import toast from 'react-hot-toast';
 import RouteEditor from '../components/RouteEditor';
 
 const Profile = () => {
-    const { currentUser, linkWithGoogle, loginWithGoogle, loginAnonymously, logout } = useAuth();
+    const {
+        currentUser,
+        linkWithGoogle,
+        loginWithGoogle,
+        loginAnonymously,
+        logout,
+        authNotice,
+        clearAuthNotice,
+    } = useAuth();
 
     const [userPosts, setUserPosts] = useState([]);
     const [thanksCount, setThanksCount] = useState(0);
@@ -487,6 +495,44 @@ const Profile = () => {
     return (
         <>
         <div className="profile-page">
+            {authNotice && (
+                <div
+                    role="alert"
+                    style={{
+                        backgroundColor: '#FFFBEB',
+                        border: '1.5px solid #F59E0B',
+                        borderRadius: '14px',
+                        padding: '12px 14px',
+                        marginBottom: 'var(--spacing-md)',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '10px',
+                        color: '#92400E',
+                    }}
+                >
+                    <span aria-hidden="true" style={{ fontSize: '1.1rem' }}>🛡️</span>
+                    <div style={{ flex: 1, fontSize: '0.78rem', lineHeight: 1.6 }}>
+                        <strong style={{ display: 'block', marginBottom: '2px' }}>ゲスト記録を保護しました</strong>
+                        {authNotice.message}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={clearAuthNotice}
+                        aria-label="お知らせを閉じる"
+                        style={{
+                            border: 'none',
+                            background: 'transparent',
+                            color: '#92400E',
+                            cursor: 'pointer',
+                            fontSize: '1rem',
+                            lineHeight: 1,
+                            padding: '2px',
+                        }}
+                    >
+                        ×
+                    </button>
+                </div>
+            )}
             {currentUser?.isAnonymous && (
                 <div style={{
                     background: 'linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%)',

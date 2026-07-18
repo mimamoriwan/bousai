@@ -172,11 +172,7 @@ export const useMapData = () => {
     /** マイマップへの保存トグル */
     const handleSavePost = async (postId, currentSavedBy) => {
         if (!currentUser) {
-            alert('「マイマップに保存」機能を利用するには、ログインが必要です。');
-            return;
-        }
-        if (currentUser.isAnonymous) {
-            alert('自分だけのマイマップ機能を利用するには、Googleアカウントでの本登録（無料）が必要です🐾\n（マイページより登録できます）');
+            alert('ゲスト情報を準備中です。少し待ってからもう一度お試しください。');
             return;
         }
         if (!currentUserHash) return;

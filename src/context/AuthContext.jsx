@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, signInWithRedirect, signOut, signInAnonymously, linkWithRedirect, getRedirectResult, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
+import { onAuthStateChanged, signInWithRedirect, signOut, signInAnonymously, linkWithRedirect, getRedirectResult } from 'firebase/auth';
 import { doc, getDoc, runTransaction } from 'firebase/firestore';
 import { auth, provider, db } from '../firebase';
 import { hashUid } from '../utils/hashUtils';
@@ -26,8 +26,13 @@ export const AuthProvider = ({ children }) => {
     const [currentUserHash, setCurrentUserHash] = useState(null);
     const [memberNumber, setMemberNumber] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [authNotice, setAuthNotice] = useState(null);
+
+    const clearAuthNotice = () => setAuthNotice(null);
+
     const loginWithGoogle = async () => {
         try {
+            clearAuthNotice();
             await signInWithRedirect(auth, provider);
         } catch (error) {
             console.error('Error signing in with Google redirect:', error);
@@ -46,6 +51,7 @@ export const AuthProvider = ({ children }) => {
 
     const linkWithGoogle = async () => {
         try {
+            clearAuthNotice();
             if (currentUser && currentUser.isAnonymous) {
                 await linkWithRedirect(currentUser, provider);
             }
@@ -60,6 +66,7 @@ export const AuthProvider = ({ children }) => {
             // React状態を先にクリアして次回ログインフローに干渉しないようにする
             setCurrentUser(null);
             setMemberNumber(null);
+            clearAuthNotice();
             await signOut(auth);
         } catch (error) {
             console.error('Error signing out:', error);
@@ -73,23 +80,26 @@ export const AuthProvider = ({ children }) => {
             .then(async (result) => {
                 if (result) {
                     console.log('Successfully completed redirect flow:', result);
+                    clearAuthNotice();
                 }
                 // リダイレクト結果処理完了 — loading は onAuthStateChanged に委ねる
             }).catch(async (error) => {
                 console.error('Redirect auth error:', error);
                 if (error.code === 'auth/credential-already-in-use') {
-                    // This means the Google account has already been used to create an account
-                    console.log('Account already exists. Logging in instead of linking.');
-                    try {
-                        const credential = GoogleAuthProvider.credentialFromError(error);
-                        await signInWithCredential(auth, credential);
-                    } catch (signInError) {
-                        console.error('Fallback sign-in failed', signInError);
-                        // フォールバックも失敗した場合はフリーズしないようloading解除
-                        setLoading(false);
-                    }
+                    // 自動で既存アカウントへ切り替えると、匿名UIDに紐づく記録が
+                    // 見えなくなるため、現在のゲストセッションを保護して案内する。
+                    console.warn('Google account is already registered; preserving the guest session.');
+                    setAuthNotice({
+                        type: 'existing-account',
+                        message: 'このGoogleアカウントはすでに登録済みです。ゲスト記録を保護するため、自動ログインは行いませんでした。現在の記録はこの端末に残っています。既存アカウントとの統合機能は今後対応します。',
+                    });
+                    setLoading(false);
                 } else {
                     // その他のリダイレクトエラー（ポップアップブロック等）でもloading解除
+                    setAuthNotice({
+                        type: 'link-error',
+                        message: 'Google連携を完了できませんでした。ゲスト記録はそのまま残っています。時間をおいて、もう一度お試しください。',
+                    });
                     setLoading(false);
                 }
             });
@@ -157,7 +167,9 @@ export const AuthProvider = ({ children }) => {
         loginWithGoogle,
         loginAnonymously,
         linkWithGoogle,
-        logout
+        logout,
+        authNotice,
+        clearAuthNotice,
     };
 
     return (
