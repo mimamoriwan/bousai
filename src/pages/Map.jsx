@@ -1,4 +1,4 @@
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
@@ -39,48 +39,42 @@ const getLocationErrorMessage = (error) => {
 };
 
 // ─────────────────────────────────────────
-// LocationMarker: 現在地ピン（MapContainer 内で使用）
+// LocationMarker: 初期取得と再取得で共有する現在地ピン
 // ─────────────────────────────────────────
-const LocationMarker = ({ isPostMode, onMapClick }) => {
-    const [position, setPosition] = useState(null);
-    const map = useMap();
-
-    useEffect(() => {
-        map.locate().on('locationfound', (e) => {
-            setPosition(e.latlng);
-            map.locate({ setView: false, maxZoom: 16 });
-        });
-    }, [map]);
-
-    useMapEvents({
-        locationfound(e) {
-            setPosition(e.latlng);
-        },
-    });
-
+const LocationMarker = ({ position }) => {
     const currentLocationIcon = L.divIcon({
         className: 'user-location-icon',
-        html: '<div style="background-color: #EF4444; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>',
+        html: '<div style="background-color: #2563EB; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 3px rgba(37,99,235,0.25), 0 2px 6px rgba(0,0,0,0.35);"></div>',
         iconSize: [24, 24],
         iconAnchor: [12, 12]
     });
 
+    if (!position) return null;
+
+    const center = [position.lat, position.lng];
+    const accuracy = Number.isFinite(position.accuracy) ? position.accuracy : null;
+
     return (
         <>
-            {position !== null && (
-                <Marker
-                    position={position}
-                    icon={currentLocationIcon}
-                    zIndexOffset={10000}
-                    eventHandlers={{
-                        click: () => {
-                            if (isPostMode) onMapClick(position);
-                        }
+            {accuracy && (
+                <Circle
+                    center={center}
+                    radius={Math.max(accuracy, 10)}
+                    pathOptions={{
+                        color: '#2563EB',
+                        weight: 1,
+                        opacity: 0.35,
+                        fillColor: '#60A5FA',
+                        fillOpacity: 0.12,
                     }}
-                >
-                    {!isPostMode && <Popup><strong>現在地</strong></Popup>}
-                </Marker>
+                />
             )}
+            <Marker position={center} icon={currentLocationIcon} zIndexOffset={10000}>
+                <Popup>
+                    <strong>現在地</strong>
+                    {accuracy && <><br /><span>精度 約{Math.round(accuracy)}m</span></>}
+                </Popup>
+            </Marker>
         </>
     );
 };
@@ -168,7 +162,9 @@ const MapPage = () => {
 
     // 初期位置取得
     const [initialCenter, setInitialCenter] = useState(null);
+    const [currentPosition, setCurrentPosition] = useState(null);
     const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+    const [isRefreshingLocation, setIsRefreshingLocation] = useState(false);
     const [locationMessage, setLocationMessage] = useState('');
 
     useEffect(() => {
@@ -196,7 +192,13 @@ const MapPage = () => {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timeoutId);
-                setInitialCenter([pos.coords.latitude, pos.coords.longitude]);
+                const position = {
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy,
+                };
+                setInitialCenter([position.lat, position.lng]);
+                setCurrentPosition(position);
                 setLocationMessage('');
                 setIsLoadingLocation(false);
             },
@@ -215,27 +217,34 @@ const MapPage = () => {
 
     const moveToCurrentLocation = () => {
         if (showQuickPostSheet) closeQuickPost();
+        if (isRefreshingLocation) return;
 
         if (!navigator.geolocation) {
             setLocationMessage(getLocationErrorMessage());
             return;
         }
 
+        setIsRefreshingLocation(true);
         navigator.geolocation.getCurrentPosition(
             (pos) => {
-                const center = [pos.coords.latitude, pos.coords.longitude];
+                const position = {
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy,
+                };
+                const center = [position.lat, position.lng];
                 setInitialCenter(center);
+                setCurrentPosition(position);
                 setLocationMessage('');
                 if (mapRef.current) {
                     mapRef.current.setView(center, 16, { animate: true, duration: 0.5 });
-                    mapRef.current.fire('locationfound', {
-                        latlng: { lat: center[0], lng: center[1] }
-                    });
                 }
+                setIsRefreshingLocation(false);
             },
             (error) => {
                 console.warn('現在地取得エラー:', error);
                 setLocationMessage(getLocationErrorMessage(error));
+                setIsRefreshingLocation(false);
             },
             { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
         );
@@ -696,13 +705,14 @@ const MapPage = () => {
                                         <button
                                             type="button"
                                             onClick={moveToCurrentLocation}
+                                            disabled={isRefreshingLocation}
                                             style={{
                                                 flexShrink: 0, border: '1px solid #FB923C', borderRadius: '9px',
                                                 backgroundColor: '#FFF7ED', color: '#C2410C',
                                                 padding: '6px 8px', fontWeight: 'bold', cursor: 'pointer',
                                             }}
                                         >
-                                            再試行
+                                            {isRefreshingLocation ? '取得中…' : '再試行'}
                                         </button>
                                     </div>
                                 )}
@@ -711,6 +721,8 @@ const MapPage = () => {
                                 <div style={{ position: 'absolute', bottom: 'calc(25vh + 100px)', right: '20px', zIndex: 1000 }}>
                                     <button
                                         onClick={moveToCurrentLocation}
+                                        disabled={isRefreshingLocation}
+                                        aria-busy={isRefreshingLocation}
                                         style={{
                                             backgroundColor: 'white',
                                             color: 'var(--color-primary)',
@@ -730,9 +742,13 @@ const MapPage = () => {
                                         title="現在地に戻る"
                                         aria-label="現在地に戻る"
                                     >
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="28px" height="28px">
-                                            <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
-                                        </svg>
+                                        {isRefreshingLocation ? (
+                                            <span aria-hidden="true" style={{ fontSize: '1rem' }}>…</span>
+                                        ) : (
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="28px" height="28px" aria-hidden="true">
+                                                <path d="M11 2h2v2.07A8.002 8.002 0 0 1 19.93 11H22v2h-2.07A8.002 8.002 0 0 1 13 19.93V22h-2v-2.07A8.002 8.002 0 0 1 4.07 13H2v-2h2.07A8.002 8.002 0 0 1 11 4.07V2Zm1 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12Zm0 3a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z" />
+                                            </svg>
+                                        )}
                                     </button>
                                 </div>
 
@@ -1320,7 +1336,7 @@ const MapPage = () => {
                                 return null;
                             })}
 
-                            <LocationMarker />
+                            <LocationMarker position={currentPosition} />
 
                             {/* ⚠️ 危険ピン（アラートモード） */}
                             {displayMode === 'alert' && (
