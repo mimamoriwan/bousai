@@ -160,6 +160,11 @@ const MapPage = () => {
         return () => clearTimeout(timer);
     }, []);
 
+    useEffect(() => {
+        document.body.classList.toggle('spot-registration-open', Boolean(tempPost));
+        return () => document.body.classList.remove('spot-registration-open');
+    }, [tempPost]);
+
     // 初期位置取得
     const [initialCenter, setInitialCenter] = useState(null);
     const [currentPosition, setCurrentPosition] = useState(null);
@@ -1144,8 +1149,9 @@ const MapPage = () => {
                         {/* ── 投稿フォームモーダル ── */}
                         {tempPost && (
                             <div
+                                className="spot-registration-modal"
                                 style={{
-                                    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000,
+                                    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 10000,
                                     display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
                                     overflowY: 'auto', WebkitOverflowScrolling: 'touch',
                                     padding: '16px',
@@ -1172,8 +1178,8 @@ const MapPage = () => {
                                     <form onSubmit={handlePostSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
                                         <div style={{ padding: '16px' }}>
                                             <div style={{ marginBottom: '10px' }}>
-                                                <label style={{ display: 'block', fontWeight: 'bold' }}>種類</label>
-                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>種類</label>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                                     {[
                                                         { value: 'danger', label: '⚠️ 危険・注意' },
                                                         { value: 'walk',   label: '🐾 お散歩情報' },
@@ -1181,12 +1187,28 @@ const MapPage = () => {
                                                         { value: 'plant',  label: '🌿 植物' },
                                                         { value: 'others', label: '💡 街の発見・その他' },
                                                     ].map(({ value, label }) => (
-                                                        <label key={value} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <label
+                                                            key={value}
+                                                            style={{
+                                                                display: 'flex', alignItems: 'center', gap: '7px',
+                                                                minHeight: '46px', padding: '8px 10px', boxSizing: 'border-box',
+                                                                borderRadius: '10px', cursor: 'pointer',
+                                                                border: postForm.type === value
+                                                                    ? '2px solid var(--color-primary)'
+                                                                    : '1px solid #D1D5DB',
+                                                                backgroundColor: postForm.type === value ? '#FFF7ED' : '#FFFFFF',
+                                                                color: postForm.type === value ? '#C2410C' : '#374151',
+                                                                fontSize: '0.83rem', fontWeight: postForm.type === value ? 'bold' : '600',
+                                                                lineHeight: 1.25,
+                                                            }}
+                                                        >
                                                             <input
                                                                 type="radio" name="type" value={value}
                                                                 checked={postForm.type === value}
                                                                 onChange={e => setPostForm({ ...postForm, type: e.target.value })}
-                                                            /> {label}
+                                                                style={{ width: '17px', height: '17px', flexShrink: 0, accentColor: 'var(--color-primary)' }}
+                                                            />
+                                                            <span>{label}</span>
                                                         </label>
                                                     ))}
                                                 </div>
@@ -1281,12 +1303,15 @@ const MapPage = () => {
                                             </div>
                                         </div>
                                         <div style={{
-                                            position: 'sticky', bottom: '90px', background: '#fff',
+                                            position: 'sticky', bottom: 0, background: '#fff',
                                             padding: '12px 16px calc(12px + env(safe-area-inset-bottom))',
                                             display: 'flex', gap: '10px',
-                                            borderTop: '1px solid #eee', zIndex: 10
+                                            borderTop: '1px solid #eee', zIndex: 10,
+                                            boxShadow: '0 -4px 12px rgba(0,0,0,0.06)'
                                         }}>
-                                            <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setTempPost(null)} disabled={isSubmitting}>キャンセル</button>
+                                            <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setTempPost(null)} disabled={isSubmitting}>
+                                                {isSelectingLocation ? '場所を選び直す' : 'キャンセル'}
+                                            </button>
                                             <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={isProcessingImage || isSubmitting}>
                                                 {isSubmitting ? '保存中...' : '登録'}
                                             </button>
