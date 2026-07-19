@@ -131,8 +131,31 @@ service cloud.firestore {
         && validCoordinates(request.resource.data)
         && request.resource.data.actionType in ['sniff', 'pee', 'poop', 'mark']
         && request.resource.data.timestamp is int
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.createdAt == request.time;
       allow update: if false;
+    }
+
+    // 正確なwalkActionsは公開せず、Cloud Functionsが作る週・約250mセルだけを公開する。
+    // 同じ利用者の連打で公開されないよう、3人以上のセルに限定する。
+    match /walkHeatmapPeriods/{periodId}/cells/{cellId} {
+      // 3人未満のセルはCloud Functionsがこの公開コレクションへ作成しない。
+      // クライアントは公開済みセルだけを一覧取得できる。
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 集約の重複防止とUID別内訳はAdmin SDK専用。クライアントには一切公開しない。
+    match /_walkHeatmapContributions/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /_walkHeatmapAggregates/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /_walkHeatmapEvents/{document=**} {
+      allow read, write: if false;
     }
 
     function ownsSafetyReport(data) {

@@ -3,7 +3,13 @@ dotenv.config();
 
 import { setGlobalOptions } from "firebase-functions";
 import { onRequest } from "firebase-functions/https";
+import {
+  onDocumentCreated,
+  onDocumentDeleted,
+} from "firebase-functions/v2/firestore";
 import * as logger from "firebase-functions/logger";
+import { getApps, initializeApp } from "firebase-admin/app";
+import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import {
   validateSignature,
   Client,
@@ -13,11 +19,149 @@ import {
   ImageMessage,
 } from "@line/bot-sdk";
 import axios from "axios";
+import {
+  applyHeatmapCountDelta,
+  getHeatmapCell,
+  getIsoWeekId,
+  shouldPublishHeatmapCell,
+} from "./walkHeatmap.js";
 
 // ---------------------------------------------------------------------------
 // Global options
 // ---------------------------------------------------------------------------
 setGlobalOptions({ maxInstances: 10 });
+
+if (getApps().length === 0) {
+  initializeApp();
+}
+const adminDb = getFirestore();
+
+interface WalkActionDocument {
+  uid?: unknown;
+  lat?: unknown;
+  lng?: unknown;
+  createdAt?: unknown;
+  timestamp?: unknown;
+}
+
+const getWalkActionDate = (data: WalkActionDocument): Date => {
+  if (data.createdAt instanceof Timestamp) {
+    return data.createdAt.toDate();
+  }
+  if (typeof data.timestamp === "number" && Number.isFinite(data.timestamp)) {
+    return new Date(data.timestamp);
+  }
+  return new Date();
+};
+
+const sanitizeEventId = (eventId: string): string =>
+  eventId.replace(/[^a-zA-Z0-9_-]/g, "_");
+
+/**
+ * 本人専用の正確なwalkActionsを、公開可能な週・約250mセルへ集約する。
+ * UIDごとの内訳は非公開コレクションに分離し、公開セルには人数と件数だけを保存する。
+ */
+const updateWalkHeatmap = async (
+  data: WalkActionDocument,
+  delta: 1 | -1,
+  eventId: string
+): Promise<void> => {
+  if (
+    typeof data.uid !== "string" || data.uid.length === 0 ||
+    typeof data.lat !== "number" || typeof data.lng !== "number"
+  ) {
+    logger.warn("Skipping invalid walk action heatmap event", { eventId });
+    return;
+  }
+
+  const cell = getHeatmapCell(data.lat, data.lng);
+  const periodId = getIsoWeekId(getWalkActionDate(data));
+  const publicAggregateRef = adminDb.doc(
+    `walkHeatmapPeriods/${periodId}/cells/${cell.id}`
+  );
+  const internalAggregateRef = adminDb.doc(
+    `_walkHeatmapAggregates/${periodId}_${cell.id}`
+  );
+  const contributionRef = adminDb.doc(
+    `_walkHeatmapContributions/${periodId}_${cell.id}/users/${data.uid}`
+  );
+  const eventRef = adminDb.doc(
+    `_walkHeatmapEvents/${sanitizeEventId(eventId)}`
+  );
+
+  await adminDb.runTransaction(async (transaction) => {
+    const [eventSnapshot, aggregateSnapshot, contributionSnapshot] =
+      await Promise.all([
+        transaction.get(eventRef),
+        transaction.get(internalAggregateRef),
+        transaction.get(contributionRef),
+      ]);
+
+    if (eventSnapshot.exists) return;
+
+    const aggregate = aggregateSnapshot.data() ?? {};
+    const contribution = contributionSnapshot.data() ?? {};
+    const counts = applyHeatmapCountDelta(
+      typeof aggregate.actionCount === "number" ? aggregate.actionCount : 0,
+      typeof aggregate.contributorCount === "number" ? aggregate.contributorCount : 0,
+      typeof contribution.actionCount === "number" ? contribution.actionCount : 0,
+      delta
+    );
+
+    if (counts.actionCount === 0) {
+      transaction.delete(internalAggregateRef);
+      transaction.delete(publicAggregateRef);
+    } else {
+      const aggregateData = {
+        periodId,
+        cellId: cell.id,
+        lat: cell.lat,
+        lng: cell.lng,
+        actionCount: counts.actionCount,
+        contributorCount: counts.contributorCount,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      transaction.set(internalAggregateRef, aggregateData);
+      if (shouldPublishHeatmapCell(counts)) {
+        transaction.set(publicAggregateRef, aggregateData);
+      } else {
+        transaction.delete(publicAggregateRef);
+      }
+    }
+
+    if (counts.contributorActionCount === 0) {
+      transaction.delete(contributionRef);
+    } else {
+      transaction.set(contributionRef, {
+        actionCount: counts.contributorActionCount,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    transaction.create(eventRef, {
+      processedAt: FieldValue.serverTimestamp(),
+      periodId,
+      cellId: cell.id,
+      delta,
+    });
+  });
+};
+
+export const aggregateWalkActionCreated = onDocumentCreated(
+  { document: "walkActions/{actionId}", region: "asia-northeast1" },
+  async (event) => {
+    const data = event.data?.data() as WalkActionDocument | undefined;
+    if (data) await updateWalkHeatmap(data, 1, event.id);
+  }
+);
+
+export const aggregateWalkActionDeleted = onDocumentDeleted(
+  { document: "walkActions/{actionId}", region: "asia-northeast1" },
+  async (event) => {
+    const data = event.data?.data() as WalkActionDocument | undefined;
+    if (data) await updateWalkHeatmap(data, -1, event.id);
+  }
+);
 
 // ---------------------------------------------------------------------------
 // LINE SDK の設定

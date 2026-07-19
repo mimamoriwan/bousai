@@ -1,4 +1,5 @@
 import { deleteApp, initializeApp } from 'firebase/app';
+import { createRequire } from 'node:module';
 import {
     connectAuthEmulator,
     EmailAuthProvider,
@@ -42,6 +43,19 @@ const config = {
 };
 
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const requireFromFunctions = createRequire(new URL('../functions/package.json', import.meta.url));
+const {
+    deleteApp: deleteAdminApp,
+    initializeApp: initializeAdminApp,
+} = requireFromFunctions('firebase-admin/app');
+const {
+    getFirestore: getAdminFirestore,
+    Timestamp: AdminTimestamp,
+} = requireFromFunctions('firebase-admin/firestore');
+
+process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8086';
+const adminApp = initializeAdminApp({ projectId }, `heatmap-admin-${suffix}`);
+const adminDb = getAdminFirestore(adminApp);
 
 const createClient = (name, withAuth = true) => {
     const app = initializeApp(config, `${name}-${suffix}`);
@@ -102,6 +116,11 @@ let safetyReportRef;
 let imageRef;
 let linkedPrivatePinRef;
 let linkedWalkActionRef;
+const heatmapPeriodId = '2026-W29';
+const publicHeatmapCellId = `public-${suffix}`;
+const publicHeatmapPath = `walkHeatmapPeriods/${heatmapPeriodId}/cells/${publicHeatmapCellId}`;
+const internalHeatmapPath = `_walkHeatmapContributions/${heatmapPeriodId}_${publicHeatmapCellId}/users/internal`;
+const internalAggregatePath = `_walkHeatmapAggregates/${heatmapPeriodId}_${publicHeatmapCellId}`;
 
 try {
     const ownerCredential = await signInAnonymously(owner.auth);
@@ -216,6 +235,55 @@ try {
         })
     );
     invalidWalkActionRef = null;
+    await assertRejected('任意の作成日時を指定したお散歩記録を拒否', () =>
+        setDoc(doc(owner.db, 'walkActions', `forged-time-${suffix}`), {
+            uid: ownerUid,
+            actionType: 'sniff',
+            lat: 35.6722,
+            lng: 139.7364,
+            timestamp: Date.now(),
+            createdAt: new Date('2020-01-01T00:00:00Z'),
+        })
+    );
+
+    const heatmapBase = {
+        periodId: heatmapPeriodId,
+        lat: 35.67125,
+        lng: 139.73625,
+        actionCount: 5,
+        updatedAt: AdminTimestamp.now(),
+    };
+    await Promise.all([
+        adminDb.doc(publicHeatmapPath).set({
+            ...heatmapBase,
+            cellId: publicHeatmapCellId,
+            contributorCount: 3,
+        }),
+        adminDb.doc(internalAggregatePath).set({
+            ...heatmapBase,
+            cellId: publicHeatmapCellId,
+            contributorCount: 2,
+        }),
+        adminDb.doc(internalHeatmapPath).set({
+            actionCount: 2,
+            updatedAt: AdminTimestamp.now(),
+        }),
+    ]);
+
+    const publicHeatmapCell = await getDoc(doc(reader.db, publicHeatmapPath));
+    if (!publicHeatmapCell.exists()) {
+        throw new Error('3人以上の集約セルを公開読み取りできませんでした。');
+    }
+    console.log('✓ 3人以上の集約セルを未ログインで読み取り');
+    await assertRejected('クライアントによる集約セル書き換えを拒否', () =>
+        updateDoc(doc(owner.db, publicHeatmapPath), { actionCount: 99 })
+    );
+    await assertRejected('3人未満を含む内部集約の読み取りを拒否', () =>
+        getDoc(doc(owner.db, internalAggregatePath))
+    );
+    await assertRejected('UID別の集約内訳読み取りを拒否', () =>
+        getDoc(doc(owner.db, internalHeatmapPath))
+    );
 
     safetyReportRef = doc(owner.db, 'safetyReports', `spot-${suffix}`);
     await setDoc(safetyReportRef, {
@@ -294,9 +362,15 @@ try {
     if (privatePinRef) await deleteDoc(privatePinRef).catch(() => {});
     if (publicPinRef) await deleteDoc(publicPinRef).catch(() => {});
     await Promise.all([
+        adminDb.doc(publicHeatmapPath).delete().catch(() => {}),
+        adminDb.doc(internalAggregatePath).delete().catch(() => {}),
+        adminDb.doc(internalHeatmapPath).delete().catch(() => {}),
+    ]);
+    await Promise.all([
         deleteApp(owner.app),
         deleteApp(attacker.app),
         deleteApp(reader.app),
         deleteApp(linkGuest.app),
+        deleteAdminApp(adminApp),
     ]);
 }

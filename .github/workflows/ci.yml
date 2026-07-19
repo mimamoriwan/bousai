@@ -36,6 +36,9 @@ jobs:
         # metadata, while this recovered app already runs on React 19.
         run: npm ci --legacy-peer-deps
 
+      - name: Install Functions dependencies
+        run: npm ci --prefix functions
+
       - name: Install Firebase CLI
         run: npm install --global firebase-tools@14.11.0
 
@@ -44,6 +47,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Test Functions aggregation
+        run: npm test --prefix functions
 
       - name: Firebase Emulator permissions
         run: npm run test:emulator:ci
