@@ -1,6 +1,6 @@
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle } from 'react-leaflet';
 import L from 'leaflet';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import shelters from '../data/shelters.json';
 import { db, storage } from '../firebase';
@@ -17,6 +17,7 @@ import { useMapData } from '../hooks/useMapData';
 import { useWalkHeatmap } from '../hooks/useWalkHeatmap';
 import WalkControllerSheet from '../components/map/WalkControllerSheet';
 import WalkHeatLayer from '../components/map/WalkHeatLayer';
+import MapActionSheet from '../components/map/MapActionSheet';
 import { isBrowserOnline, OFFLINE_WRITE_MESSAGE } from '../utils/networkStatus';
 
 const DEFAULT_LOCATION = [36.0834, 140.0766];
@@ -127,6 +128,7 @@ const MapPage = () => {
     const [isSelectingSafetyLocation, setIsSelectingSafetyLocation] = useState(false);
     const [pendingWalkAction, setPendingWalkAction] = useState(null);
     const [showPostOptions, setShowPostOptions] = useState(false);
+    const closeActionMenu = useCallback(() => setShowPostOptions(false), []);
     const [tempPost, setTempPost] = useState(null);
     const [postForm, setPostForm] = useState({ type: 'danger', title: '', note: '', image: null, visibility: 'public' });
     const [isProcessingImage, setIsProcessingImage] = useState(false);
@@ -641,6 +643,38 @@ const MapPage = () => {
         walkMarkerRefs.current.get(action.id)?.openPopup();
     };
 
+    const handleCurrentLocationPost = () => {
+        closeActionMenu();
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => setTempPost({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                (error) => {
+                    console.warn('Geolocation fallback:', error);
+                    startMapLocationSelection({ locationError: error, notifyLocationFailure: true });
+                },
+                { enableHighAccuracy: true, timeout: 5000 }
+            );
+            return;
+        }
+        startMapLocationSelection({ notifyLocationFailure: true });
+    };
+
+    const handleOpenQuickPost = () => {
+        closeActionMenu();
+        setQuickPostStep(1);
+        setShowQuickPostSheet(true);
+    };
+
+    const handleSelectMyMap = () => {
+        if (!currentUser) {
+            alert('ゲスト情報を準備中です。少し待ってからもう一度お試しください。');
+            return;
+        }
+        setActiveMapLayer('myMap');
+        setDisplayMode('alert');
+        setFilter('all');
+    };
+
     // ─────────────────────────────────────────
     // RENDER
     // ─────────────────────────────────────────
@@ -837,303 +871,52 @@ const MapPage = () => {
                                 </div>
 
                                 {/* 🐾 アクションメニュー FAB */}
-                                <div style={{ position: 'absolute', bottom: 'calc(25vh + 30px)', right: '16px', zIndex: 1000 }}>
+                                <div className="map-action-fab-wrap">
                                     <button
+                                        type="button"
                                         onClick={() => {
                                             if (showQuickPostSheet) {
                                                 closeQuickPost();
                                                 return;
                                             }
-                                            setShowPostOptions(!showPostOptions);
+                                            setShowPostOptions((isOpen) => !isOpen);
                                         }}
-                                        className="btn"
-                                        style={{
-                                            backgroundColor: 'var(--color-primary)',
-                                            color: 'white',
-                                            width: '60px', height: '60px',
-                                            borderRadius: '50%',
-                                            boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            fontSize: '1.8rem',
-                                            transition: 'background-color 0.3s, transform 0.2s',
-                                            padding: 0
-                                        }}
+                                        className="map-action-fab"
+                                        aria-label="アクションメニューを開く"
+                                        aria-expanded={showPostOptions}
+                                        aria-controls="map-action-sheet"
                                     >
-                                        🐾
+                                        <span className="map-action-fab-paw" aria-hidden="true">🐾</span>
+                                        <span className="map-action-fab-label">メニュー</span>
                                     </button>
                                 </div>
                             </>
                         )}
 
                         {/* ── アクション選択シート ── */}
-                        {showPostOptions && (
-                            <div
-                                style={{
-                                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                                    backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 2000,
-                                    display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-                                }}
-                                onClick={() => setShowPostOptions(false)}
-                            >
-                                <div
-                                    className="card"
-                                    style={{
-                                        width: '100%', maxWidth: '500px', margin: 0,
-                                        borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
-                                        padding: 0,
-                                        animation: 'slideUp 0.3s ease-out',
-                                        maxHeight: '85dvh',
-                                        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-                                    }}
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    <div style={{ padding: '18px 20px 14px', flexShrink: 0, borderBottom: '1px solid #F3F4F6' }}>
-                                        <h3 style={{ textAlign: 'center', margin: 0, fontSize: '1.05rem', color: '#374151' }}>アクションを選択</h3>
-                                    </div>
-
-                                    <div style={{
-                                        overflowY: 'auto',
-                                        WebkitOverflowScrolling: 'touch',
-                                        overscrollBehaviorY: 'contain',
-                                        flex: 1,
-                                        padding: '10px 12px',
-                                        paddingBottom: 'max(70px, env(safe-area-inset-bottom))',
-                                    }}>
-                                        <div style={{
-                                            display: 'grid', gridTemplateColumns: '1fr 1fr',
-                                            gap: '7px', marginBottom: '8px',
-                                        }}>
-                                            {/* 📍 現在地で報告 */}
-                                            <button
-                                                onClick={() => {
-                                                    setShowPostOptions(false);
-                                                    if (navigator.geolocation) {
-                                                        navigator.geolocation.getCurrentPosition(
-                                                            (pos) => setTempPost({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                                                            (err) => {
-                                                                console.warn('Geolocation fallback:', err);
-                                                                startMapLocationSelection({ locationError: err, notifyLocationFailure: true });
-                                                            },
-                                                            { enableHighAccuracy: true, timeout: 5000 }
-                                                        );
-                                                    } else {
-                                                        startMapLocationSelection({ notifyLocationFailure: true });
-                                                    }
-                                                }}
-                                                style={{
-                                                    padding: '10px 8px', borderRadius: '12px', border: 'none',
-                                                    backgroundColor: 'var(--color-primary)', color: 'white',
-                                                    fontWeight: 'bold', cursor: 'pointer',
-                                                    display: 'flex', flexDirection: 'row',
-                                                    alignItems: 'center', justifyContent: 'center', gap: '6px',
-                                                    boxShadow: '0 2px 6px rgba(255,111,0,0.3)',
-                                                    fontSize: '0.78rem',
-                                                }}
-                                            >
-                                                <span style={{ fontSize: '1.2rem' }}>📍</span>
-                                                現在地で報告
-                                            </button>
-
-                                            {/* 🗺️ 地図から選ぶ */}
-                                            <button
-                                                onClick={() => startMapLocationSelection()}
-                                                style={{
-                                                    padding: '10px 8px', borderRadius: '12px',
-                                                    backgroundColor: '#F3F4F6', color: '#1F2937',
-                                                    border: '1px solid #E5E7EB', fontWeight: 'bold', cursor: 'pointer',
-                                                    display: 'flex', flexDirection: 'row',
-                                                    alignItems: 'center', justifyContent: 'center', gap: '6px',
-                                                    fontSize: '0.78rem',
-                                                }}
-                                            >
-                                                <span style={{ fontSize: '1.2rem' }}>🗺️</span>
-                                                地図から選ぶ
-                                            </button>
-
-                                            {/* ⚡️ クイック投稿 */}
-                                            <button
-                                                onClick={() => { setShowPostOptions(false); setQuickPostStep(1); setShowQuickPostSheet(true); }}
-                                                style={{
-                                                    padding: '10px 8px', borderRadius: '12px',
-                                                    backgroundColor: '#FFF7ED', color: '#EA580C',
-                                                    border: '1px solid #FED7AA', fontWeight: 'bold', cursor: 'pointer',
-                                                    display: 'flex', flexDirection: 'row',
-                                                    alignItems: 'center', justifyContent: 'center', gap: '6px',
-                                                    fontSize: '0.78rem',
-                                                }}
-                                            >
-                                                <span style={{ fontSize: '1.2rem' }}>⚡️</span>
-                                                クイック投稿
-                                            </button>
-
-                                            {/* 🟢 スポット安全報告 */}
-                                            <button
-                                                onClick={handleCurrentSpotSafetyReport}
-                                                disabled={isSpotReporting}
-                                                style={{
-                                                    padding: '10px 8px', borderRadius: '12px',
-                                                    backgroundColor: isSpotReporting ? '#D1FAE5' : '#ECFDF5',
-                                                    color: '#065F46',
-                                                    border: '1px solid #6EE7B7', fontWeight: 'bold',
-                                                    cursor: isSpotReporting ? 'default' : 'pointer',
-                                                    display: 'flex', flexDirection: 'row',
-                                                    alignItems: 'center', justifyContent: 'center', gap: '6px',
-                                                    fontSize: '0.78rem',
-                                                }}
-                                            >
-                                                {isSpotReporting ? (
-                                                    <>
-                                                        <span style={{
-                                                            width: '16px', height: '16px',
-                                                            border: '2px solid rgba(6,95,70,0.3)',
-                                                            borderTopColor: '#065F46',
-                                                            borderRadius: '50%',
-                                                            display: 'inline-block',
-                                                            animation: 'spin 0.8s linear infinite',
-                                                            flexShrink: 0,
-                                                        }} />
-                                                        取得中...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <span style={{ fontSize: '1.2rem' }}>🟢</span>
-                                                        今ここ安全！
-                                                    </>
-                                                )}
-                                            </button>
-
-                                            {/* ✅ お散歩異常なし報告 */}
-                                            <button
-                                                onClick={() => { setShowPostOptions(false); setShowSafetyReport(true); }}
-                                                style={{
-                                                    padding: '10px 8px', borderRadius: '12px',
-                                                    backgroundColor: '#F0FDF4', color: '#15803D',
-                                                    border: '1px solid #86EFAC', fontWeight: 'bold', cursor: 'pointer',
-                                                    display: 'flex', flexDirection: 'row',
-                                                    alignItems: 'center', justifyContent: 'center', gap: '6px',
-                                                    fontSize: '0.78rem',
-                                                }}
-                                            >
-                                                <span style={{ fontSize: '1.2rem' }}>✅</span>
-                                                お散歩異常なし
-                                            </button>
-
-                                            {/* 🐾 お散歩記録をはじめる（全幅） */}
-                                            <button
-                                                onClick={() => { setShowPostOptions(false); setIsWalkRecording(true); }}
-                                                style={{
-                                                    gridColumn: '1 / -1',
-                                                    padding: '12px 8px', borderRadius: '12px',
-                                                    backgroundColor: '#FCE7F3', color: '#BE185D',
-                                                    border: '1px solid #FBCFE8', fontWeight: 'bold', cursor: 'pointer',
-                                                    display: 'flex', flexDirection: 'row',
-                                                    alignItems: 'center', justifyContent: 'center', gap: '8px',
-                                                    fontSize: '0.9rem',
-                                                    boxShadow: '0 2px 4px rgba(190, 24, 93, 0.15)',
-                                                    marginTop: '4px'
-                                                }}
-                                            >
-                                                <span style={{ fontSize: '1.4rem' }}>🐾</span>
-                                                お散歩記録をはじめる
-                                            </button>
-                                        </div>
-
-                                        {/* マップ表示設定 */}
-                                        <div style={{ borderTop: '1px solid #E5E7EB', paddingTop: '8px', marginBottom: '6px' }}>
-                                            <div style={{ fontSize: '0.72rem', color: '#9CA3AF', marginBottom: '5px', fontWeight: 'bold', letterSpacing: '0.04em' }}>マップ表示設定</div>
-
-                                            <div style={{
-                                                display: 'flex', backgroundColor: '#E5E7EB',
-                                                borderRadius: '8px', padding: '3px', marginBottom: '5px',
-                                            }}>
-                                                <button
-                                                    onClick={() => setActiveMapLayer('public')}
-                                                    style={{
-                                                        flex: 1, padding: '7px 4px', borderRadius: '5px', border: 'none',
-                                                        backgroundColor: activeMapLayer === 'public' ? '#FFFFFF' : 'transparent',
-                                                        color: activeMapLayer === 'public' ? 'var(--color-primary)' : '#6B7280',
-                                                        fontWeight: activeMapLayer === 'public' ? 'bold' : '600',
-                                                        fontSize: '0.78rem', cursor: 'pointer',
-                                                        boxShadow: activeMapLayer === 'public' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                                                        transition: 'all 0.2s',
-                                                    }}
-                                                >🌍 みんなのマップ</button>
-                                                <button
-                                                    onClick={() => {
-                                                        if (!currentUser) {
-                                                            alert('ゲスト情報を準備中です。少し待ってからもう一度お試しください。');
-                                                            return;
-                                                        }
-                                                        setActiveMapLayer('myMap');
-                                                        setDisplayMode('alert');
-                                                        setFilter('all');
-                                                    }}
-                                                    style={{
-                                                        flex: 1, padding: '7px 4px', borderRadius: '5px', border: 'none',
-                                                        backgroundColor: activeMapLayer === 'myMap' ? '#FFFFFF' : 'transparent',
-                                                        color: activeMapLayer === 'myMap' ? 'var(--color-primary)' : '#6B7280',
-                                                        fontWeight: activeMapLayer === 'myMap' ? 'bold' : '600',
-                                                        fontSize: '0.78rem', cursor: 'pointer',
-                                                        boxShadow: activeMapLayer === 'myMap' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                                                        transition: 'all 0.2s',
-                                                    }}
-                                                >🗺️ マイマップ</button>
-                                            </div>
-
-                                            {activeMapLayer === 'myMap' && currentUser?.isAnonymous && (
-                                                <div style={{
-                                                    marginBottom: '6px', padding: '7px 9px', borderRadius: '8px',
-                                                    backgroundColor: '#FFF7ED', color: '#9A3412',
-                                                    fontSize: '0.7rem', lineHeight: 1.45,
-                                                }}>
-                                                    🐾 ゲスト記録はこの端末で確認できます。Google連携すると機種変更後も引き継げます。
-                                                </div>
-                                            )}
-
-                                            {activeMapLayer === 'public' && (
-                                                <button
-                                                    onClick={() => setShowArchived(!showArchived)}
-                                                    style={{
-                                                        width: '100%', marginBottom: '5px',
-                                                        backgroundColor: showArchived ? 'var(--color-primary)' : '#F3F4F6',
-                                                        color: showArchived ? 'white' : '#4B5563',
-                                                        border: 'none', borderRadius: '8px',
-                                                        padding: '8px', fontSize: '0.78rem', fontWeight: 'bold',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
-                                                        cursor: 'pointer', transition: 'all 0.2s',
-                                                    }}
-                                                >
-                                                    🕒 過去情報: {showArchived ? 'ON' : 'OFF'}
-                                                </button>
-                                            )}
-                                        </div>
-
-                                        <button
-                                            onClick={() => setShowPostOptions(false)}
-                                            style={{
-                                                width: '100%', padding: '11px',
-                                                borderRadius: '10px',
-                                                backgroundColor: '#F9FAFB',
-                                                border: '1.5px solid #D1D5DB',
-                                                color: '#6B7280', fontWeight: 'bold',
-                                                fontSize: '0.88rem', cursor: 'pointer',
-                                                display: 'flex', alignItems: 'center',
-                                                justifyContent: 'center', gap: '6px',
-                                            }}
-                                        >
-                                            ✕ 閉じる
-                                        </button>
-                                    </div>
-                                </div>
-                                <style>{`
-                                    @keyframes slideUp {
-                                        from { transform: translateY(100%); }
-                                        to { transform: translateY(0); }
-                                    }
-                                `}</style>
-                            </div>
-                        )}
-
+                        <MapActionSheet
+                            isOpen={showPostOptions}
+                            onClose={closeActionMenu}
+                            onCurrentLocationPost={handleCurrentLocationPost}
+                            onMapLocationPost={() => startMapLocationSelection()}
+                            onQuickPost={handleOpenQuickPost}
+                            onCurrentSpotSafety={handleCurrentSpotSafetyReport}
+                            onSafetyReport={() => {
+                                closeActionMenu();
+                                setShowSafetyReport(true);
+                            }}
+                            onStartWalk={() => {
+                                closeActionMenu();
+                                setIsWalkRecording(true);
+                            }}
+                            isSpotReporting={isSpotReporting}
+                            activeMapLayer={activeMapLayer}
+                            onSelectPublicMap={() => setActiveMapLayer('public')}
+                            onSelectMyMap={handleSelectMyMap}
+                            isAnonymous={Boolean(currentUser?.isAnonymous)}
+                            showArchived={showArchived}
+                            onToggleArchived={() => setShowArchived((isVisible) => !isVisible)}
+                        />
                         {/* ── 地図から場所選択オーバーレイ ── */}
                         {isSelectingAnyLocation && (
                             <>
