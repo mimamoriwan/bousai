@@ -1,0 +1,43 @@
+.network-status-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-shrink: 0;
+    padding: 8px 14px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.4;
+    text-align: center;
+    z-index: 20;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.network-status-banner.is-offline {
+    color: #7C2D12;
+    background: #FFEDD5;
+    border-bottom: 1px solid #FDBA74;
+}
+
+.network-status-banner.is-recovered {
+    color: #14532D;
+    background: #DCFCE7;
+    border-bottom: 1px solid #86EFAC;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .network-status-banner {
+        animation: network-status-enter 180ms ease-out;
+    }
+}
+
+@keyframes network-status-enter {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

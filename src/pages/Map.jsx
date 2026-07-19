@@ -17,6 +17,7 @@ import { useMapData } from '../hooks/useMapData';
 import { useWalkHeatmap } from '../hooks/useWalkHeatmap';
 import WalkControllerSheet from '../components/map/WalkControllerSheet';
 import WalkHeatLayer from '../components/map/WalkHeatLayer';
+import { isBrowserOnline, OFFLINE_WRITE_MESSAGE } from '../utils/networkStatus';
 
 const DEFAULT_LOCATION = [36.0834, 140.0766];
 const toPublicSafetyCoordinate = (value) => Math.round(value * 1000) / 1000;
@@ -161,6 +162,14 @@ const MapPage = () => {
     const [activePostId, setActivePostId] = useState(null);
     const [isMinTimeElapsed, setIsMinTimeElapsed] = useState(false);
 
+    const requireOnlineForWrite = () => {
+        if (isBrowserOnline()) return true;
+        import('react-hot-toast').then(({ default: toast }) => {
+            toast.error(OFFLINE_WRITE_MESSAGE, { duration: 5000 });
+        });
+        return false;
+    };
+
     useEffect(() => {
         const timer = setTimeout(() => setIsMinTimeElapsed(true), 1500);
         return () => clearTimeout(timer);
@@ -269,6 +278,7 @@ const MapPage = () => {
     const handlePostSubmit = async (e) => {
         e.preventDefault();
         if (!tempPost || !currentUser) return;
+        if (!requireOnlineForWrite()) return;
         setIsSubmitting(true);
         try {
             let imageUrl = null;
@@ -380,8 +390,9 @@ const MapPage = () => {
     };
 
     const handleCurrentSpotSafetyReport = async () => {
-        setShowPostOptions(false);
         if (isSpotReporting) return;
+        if (!requireOnlineForWrite()) return;
+        setShowPostOptions(false);
         if (!navigator.geolocation) {
             startSafetyLocationSelection();
             return;
@@ -415,6 +426,7 @@ const MapPage = () => {
 
     const handleSelectedSpotSafetyReport = async () => {
         if (!mapRef.current || isSpotReporting) return;
+        if (!requireOnlineForWrite()) return;
         const center = mapRef.current.getCenter();
         setIsSpotReporting(true);
         try {
@@ -442,6 +454,7 @@ const MapPage = () => {
 
     const handleSelectedWalkAction = async () => {
         if (!mapRef.current || !currentUser || !pendingWalkAction || isWalkActionSaving) return;
+        if (!requireOnlineForWrite()) return;
         const center = mapRef.current.getCenter();
         setIsWalkActionSaving(true);
         try {
@@ -473,6 +486,7 @@ const MapPage = () => {
 
     const handleQuickPostSubmit = async (withPhoto = false, imageDataUrl = null) => {
         if (!currentUser || quickPostLockRef.current) return;
+        if (!requireOnlineForWrite()) return;
         quickPostLockRef.current = true;
         setIsSubmitting(true);
         setQuickPostStatus('現在地を確認中...');

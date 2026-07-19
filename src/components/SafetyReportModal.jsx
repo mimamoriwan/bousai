@@ -5,6 +5,7 @@ import {
     collection, getDocs, addDoc, serverTimestamp,
 } from 'firebase/firestore';
 import toast from 'react-hot-toast';
+import { isBrowserOnline, OFFLINE_WRITE_MESSAGE } from '../utils/networkStatus';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SafetyReportModal
@@ -47,6 +48,10 @@ const SafetyReportModal = ({ currentUser, onClose }) => {
     // 安全報告を Firestore に保存
     const handleReport = async (route) => {
         if (isSubmitting) return;
+        if (!isBrowserOnline()) {
+            toast.error(OFFLINE_WRITE_MESSAGE, { duration: 5000 });
+            return;
+        }
         setIsSubmitting(true);
         setSelectedRouteId(route.id);
         try {

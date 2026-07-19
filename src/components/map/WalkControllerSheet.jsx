@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { db } from '../../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
+import { isBrowserOnline, OFFLINE_WRITE_MESSAGE } from '../../utils/networkStatus';
 
 /** お散歩アクションの設定 */
 const WALK_ACTIONS = [
@@ -67,8 +68,12 @@ const WalkControllerSheet = ({ isOpen, onClose, onRequestMapSelection }) => {
 
     const handleAction = async (actionType, label) => {
         if (!currentUser || recordingActionType) return;
-        setRecordingActionType(actionType);
         const { default: toast } = await import('react-hot-toast');
+        if (!isBrowserOnline()) {
+            toast.error(OFFLINE_WRITE_MESSAGE, { duration: 5000 });
+            return;
+        }
+        setRecordingActionType(actionType);
         try {
             if (!navigator.geolocation) {
                 throw new Error('Geolocation is unavailable');
