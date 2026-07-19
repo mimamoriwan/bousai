@@ -14,7 +14,9 @@ import SafetyReportModal from '../components/SafetyReportModal';
 // ── 切り出したモジュール ──
 import { getMarkerIcon, shelterIcon } from '../constants/mapIcons';
 import { useMapData } from '../hooks/useMapData';
+import { useWalkHeatmap } from '../hooks/useWalkHeatmap';
 import WalkControllerSheet from '../components/map/WalkControllerSheet';
+import WalkHeatLayer from '../components/map/WalkHeatLayer';
 
 const DEFAULT_LOCATION = [36.0834, 140.0766];
 const toPublicSafetyCoordinate = (value) => Math.round(value * 1000) / 1000;
@@ -113,6 +115,7 @@ const MapPage = () => {
         deletePost,
         deleteWalkAction,
     } = useMapData();
+    const { cells: walkHeatmapCells, isLoading: isWalkHeatmapLoading } = useWalkHeatmap();
 
     // ── UI 状態 ──
     const [filter, setFilter] = useState('all');
@@ -679,7 +682,7 @@ const MapPage = () => {
                                     <button
                                         onClick={() => setDisplayMode('alert')}
                                         style={{
-                                            padding: '8px 18px',
+                                            padding: '8px 12px',
                                             borderRadius: '24px',
                                             border: 'none',
                                             cursor: 'pointer',
@@ -692,12 +695,12 @@ const MapPage = () => {
                                             boxShadow: displayMode === 'alert' ? '0 2px 6px rgba(245,158,11,0.4)' : 'none',
                                         }}
                                     >
-                                        ⚠️ 危険・注意
+                                        ⚠️ 注意
                                     </button>
                                     <button
                                         onClick={() => setDisplayMode('safety')}
                                         style={{
-                                            padding: '8px 18px',
+                                            padding: '8px 12px',
                                             borderRadius: '24px',
                                             border: 'none',
                                             cursor: 'pointer',
@@ -710,15 +713,56 @@ const MapPage = () => {
                                             boxShadow: displayMode === 'safety' ? '0 2px 6px rgba(16,185,129,0.4)' : 'none',
                                         }}
                                     >
-                                        🟢 安全ルート
+                                        🟢 安全
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setActiveMapLayer('public');
+                                            setDisplayMode('activity');
+                                        }}
+                                        style={{
+                                            padding: '8px 12px',
+                                            borderRadius: '24px',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            fontWeight: 'bold',
+                                            fontSize: '0.85rem',
+                                            whiteSpace: 'nowrap',
+                                            transition: 'all 0.2s',
+                                            backgroundColor: displayMode === 'activity' ? '#F97316' : 'transparent',
+                                            color: displayMode === 'activity' ? 'white' : '#6B7280',
+                                            boxShadow: displayMode === 'activity' ? '0 2px 6px rgba(249,115,22,0.35)' : 'none',
+                                        }}
+                                    >
+                                        🐾 にぎわい
                                     </button>
                                 </div>
+
+                                {displayMode === 'activity' && (
+                                    <div
+                                        role="status"
+                                        style={{
+                                            position: 'absolute', top: '66px', left: '12px', right: '12px',
+                                            zIndex: 1090, backgroundColor: 'rgba(255,255,255,0.94)',
+                                            border: '1px solid #FED7AA', borderRadius: '12px',
+                                            boxShadow: '0 3px 10px rgba(0,0,0,0.12)', padding: '8px 10px',
+                                            color: '#9A3412', fontSize: '0.72rem', lineHeight: 1.4,
+                                            textAlign: 'center',
+                                        }}
+                                    >
+                                        {isWalkHeatmapLoading
+                                            ? '🐾 地域のお散歩傾向を集計中...'
+                                            : walkHeatmapCells.length > 0
+                                                ? '🐾 3人以上の記録を約250m単位でぼかして表示しています'
+                                                : '🐾 まだ公開できる人数に達した地域はありません'}
+                                    </div>
+                                )}
 
                                 {locationMessage && (
                                     <div
                                         role="status"
                                         style={{
-                                            position: 'absolute', top: '70px', left: '12px', right: '12px',
+                                            position: 'absolute', top: displayMode === 'activity' ? '122px' : '70px', left: '12px', right: '12px',
                                             zIndex: 1090, backgroundColor: 'rgba(255,255,255,0.96)',
                                             border: '1px solid #FDBA74', borderRadius: '12px',
                                             boxShadow: '0 3px 10px rgba(0,0,0,0.14)', padding: '9px 10px',
@@ -1354,6 +1398,10 @@ const MapPage = () => {
                                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             />
+
+                            {activeMapLayer === 'public' && displayMode === 'activity' && (
+                                <WalkHeatLayer cells={walkHeatmapCells} />
+                            )}
 
                             {/* 🟢 安全オーラ（安全ルートモード） */}
                             {displayMode === 'safety' && safetyReports.map((report) => {

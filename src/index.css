@@ -68,6 +68,11 @@ svg {
   max-width: 100%;
 }
 
+/* Leaflet.heatのCanvasは幅0のoverlay pane内でサイズを自己管理する。 */
+.leaflet-container canvas.leaflet-heatmap-layer {
+  max-width: none;
+}
+
 input,
 button,
 textarea,
