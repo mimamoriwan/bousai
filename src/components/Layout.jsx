@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { MdQrCodeScanner, MdClose } from 'react-icons/md';
+import GuestWelcome from './GuestWelcome';
 import './Layout.css';
 
 const Layout = () => {
@@ -114,6 +115,8 @@ const Layout = () => {
                     </div>
                 </div>
             )}
+
+            <GuestWelcome />
 
             <main className={`app-content ${isMapPage ? 'map-container-main' : 'scroll-page-main'}`}>
                 <Outlet />
