@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { MdQrCodeScanner, MdClose } from 'react-icons/md';
 import GuestWelcome from './GuestWelcome';
+import NetworkStatusBanner from './NetworkStatusBanner';
 import './Layout.css';
 
 const Layout = () => {
@@ -48,6 +49,8 @@ const Layout = () => {
                     </div>
                 </div>
             </header>
+
+            <NetworkStatusBanner />
 
             {/* QR Code Modal (Sibling to header/main) */}
             {showQrModal && (
