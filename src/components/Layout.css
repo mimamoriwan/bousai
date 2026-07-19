@@ -96,6 +96,11 @@
     box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
 }
 
+/* 投稿フォーム中は入力・登録操作を下部ナビより優先する */
+body.spot-registration-open .bottom-nav {
+    display: none;
+}
+
 .nav-item {
     display: flex;
     flex-direction: column;
