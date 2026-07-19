@@ -34,7 +34,7 @@
 - 記録の`createdAt`はFirestoreの受付時刻と一致させ、任意の週への記録偽装を防ぐ。
 - FunctionsイベントはイベントIDで重複処理を防ぐ。
 - 記録削除時は集約件数も減らし、3人未満になったセルは公開コレクションから削除する。
-- Functionsの純粋ロジックとFirestore Security RulesをCIで検査する。
+- Functionsの純粋ロジック、Firestore Security Rules、実際のFirestoreトランザクションをCIで検査する。
 
 ## デプロイについて
 
