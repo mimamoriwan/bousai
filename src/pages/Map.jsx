@@ -154,7 +154,7 @@ const MapPage = () => {
     const isSelectingWalkLocation = Boolean(pendingWalkAction);
     const isSelectingAnyLocation = isSelectingLocation || isSelectingSafetyLocation || isSelectingWalkLocation;
 
-    const { currentUser, currentUserHash, memberNumber } = useAuth();
+    const { currentUser, currentUserHash } = useAuth();
 
     const mapRef = useRef(null);
     const quickPostLockRef = useRef(false);
@@ -1807,7 +1807,6 @@ const MapPage = () => {
                 isOpen={isWalkRecording}
                 onClose={() => setIsWalkRecording(false)}
                 onRequestMapSelection={startWalkLocationSelection}
-                memberNumber={memberNumber}
             />
         </div>
     );

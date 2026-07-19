@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { db } from '../../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import { isBrowserOnline, OFFLINE_WRITE_MESSAGE } from '../../utils/networkStatus';
+import './WalkControllerSheet.css';
 
 /** お散歩アクションの設定 */
 const WALK_ACTIONS = [
@@ -65,14 +67,68 @@ const getLocationFailureMessage = (error) => {
 const WalkControllerSheet = ({ isOpen, onClose, onRequestMapSelection }) => {
     const { currentUser } = useAuth();
     const [recordingActionType, setRecordingActionType] = useState(null);
+    const sheetRef = useRef(null);
+    const previousFocusRef = useRef(null);
+    const onCloseRef = useRef(onClose);
+    const isBusyRef = useRef(false);
+    const recordingLockRef = useRef(false);
+    const isBusy = Boolean(recordingActionType);
+    const recordingAction = WALK_ACTIONS.find((action) => action.type === recordingActionType);
+
+    useEffect(() => {
+        onCloseRef.current = onClose;
+        isBusyRef.current = isBusy;
+    }, [isBusy, onClose]);
+
+    useEffect(() => {
+        if (!isOpen) return undefined;
+
+        previousFocusRef.current = document.activeElement;
+        const focusTimer = window.setTimeout(() => {
+            sheetRef.current?.querySelector('[data-walk-action]')?.focus();
+        }, 0);
+
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                if (!isBusyRef.current) onCloseRef.current();
+                return;
+            }
+
+            if (event.key !== 'Tab' || !sheetRef.current) return;
+            const focusableElements = Array.from(
+                sheetRef.current.querySelectorAll('button:not(:disabled)')
+            );
+            if (focusableElements.length === 0) return;
+
+            const firstElement = focusableElements[0];
+            const lastElement = focusableElements[focusableElements.length - 1];
+            if (event.shiftKey && document.activeElement === firstElement) {
+                event.preventDefault();
+                lastElement.focus();
+            } else if (!event.shiftKey && document.activeElement === lastElement) {
+                event.preventDefault();
+                firstElement.focus();
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.clearTimeout(focusTimer);
+            document.removeEventListener('keydown', handleKeyDown);
+            if (previousFocusRef.current instanceof HTMLElement) {
+                previousFocusRef.current.focus();
+            }
+        };
+    }, [isOpen]);
 
     const handleAction = async (actionType, label) => {
-        if (!currentUser || recordingActionType) return;
-        const { default: toast } = await import('react-hot-toast');
+        if (!currentUser || recordingLockRef.current) return;
         if (!isBrowserOnline()) {
             toast.error(OFFLINE_WRITE_MESSAGE, { duration: 5000 });
             return;
         }
+        recordingLockRef.current = true;
+        isBusyRef.current = true;
         setRecordingActionType(actionType);
         try {
             if (!navigator.geolocation) {
@@ -113,93 +169,83 @@ const WalkControllerSheet = ({ isOpen, onClose, onRequestMapSelection }) => {
                 toast.error('記録の保存に失敗しました。もう一度お試しください。');
             }
         } finally {
+            recordingLockRef.current = false;
+            isBusyRef.current = false;
             setRecordingActionType(null);
         }
     };
 
     return (
         <div
-            style={{
-                position: 'fixed',
-                left: 0,
-                right: 0,
-                /* ボトムナビ（64px）の真上に配置 */
-                bottom: 64,
-                zIndex: 10001,
-                background: 'white',
-                borderRadius: '20px 20px 0 0',
-                boxShadow: '0 -4px 24px rgba(0, 0, 0, 0.18)',
-                transform: isOpen ? 'translateY(0)' : 'translateY(110%)',
-                transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
-                pointerEvents: isOpen ? 'auto' : 'none',
+            className={`walk-controller-backdrop${isOpen ? ' is-open' : ''}`}
+            aria-hidden={!isOpen}
+            inert={!isOpen}
+            onClick={() => {
+                if (!isBusy) onClose();
             }}
         >
-            {/* ドラッグハンドル */}
-            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '10px' }}>
-                <div style={{
-                    width: '36px', height: '4px',
-                    borderRadius: '2px', background: '#D1D5DB',
-                }} />
-            </div>
+            <section
+                ref={sheetRef}
+                id="walk-controller-sheet"
+                className="walk-controller-sheet"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="walk-controller-title"
+                aria-describedby="walk-controller-description"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="walk-controller-handle" aria-hidden="true" />
 
-            {/* ヘッダー */}
-            <div style={{
-                display: 'flex', justifyContent: 'space-between',
-                alignItems: 'center', padding: '8px 16px 4px',
-            }}>
-                <h3 style={{
-                    margin: 0, fontSize: '1rem', color: '#1F2937',
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                }}>
-                    🐾 お散歩記録中...
-                </h3>
-                <button
-                    onClick={onClose}
-                    style={{
-                        background: 'none', border: 'none',
-                        fontSize: '1.5rem', lineHeight: 1,
-                        cursor: 'pointer', color: '#6B7280', padding: '4px',
-                    }}
-                >×</button>
-            </div>
-
-            {/* ボタングリッド */}
-            <div style={{
-                padding: '8px 16px 16px',
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '10px',
-            }}>
-                {WALK_ACTIONS.map((action) => (
+                <header className="walk-controller-header">
+                    <div>
+                        <h2 id="walk-controller-title">🐾 お散歩記録</h2>
+                        <p id="walk-controller-description">今した行動を1つ選んで記録します</p>
+                    </div>
                     <button
-                        key={action.type}
-                        onClick={() => handleAction(action.type, action.label)}
-                        disabled={Boolean(recordingActionType)}
-                        aria-busy={recordingActionType === action.type}
-                        style={{
-                            padding: '16px 8px',
-                            borderRadius: '16px',
-                            background: action.bg,
-                            border: `1px solid ${action.border}`,
-                            color: action.color,
-                            fontWeight: 'bold',
-                            fontSize: '1.1rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '8px',
-                            boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
-                            cursor: recordingActionType ? 'default' : 'pointer',
-                            opacity: recordingActionType && recordingActionType !== action.type ? 0.5 : 1,
-                        }}
+                        type="button"
+                        className="walk-controller-close"
+                        onClick={onClose}
+                        disabled={isBusy}
+                        aria-label="お散歩記録を閉じる"
                     >
-                        <span style={{ fontSize: '2rem' }}>
-                            {recordingActionType === action.type ? '⏳' : action.emoji}
-                        </span>
-                        {recordingActionType === action.type ? '記録中...' : action.label}
+                        <span aria-hidden="true">×</span>
                     </button>
-                ))}
-            </div>
+                </header>
+
+                <div className="walk-controller-actions">
+                    {WALK_ACTIONS.map((action) => {
+                        const isRecordingThisAction = recordingActionType === action.type;
+                        return (
+                            <button
+                                key={action.type}
+                                type="button"
+                                data-walk-action
+                                className="walk-controller-action"
+                                onClick={() => handleAction(action.type, action.label)}
+                                disabled={isBusy}
+                                aria-busy={isRecordingThisAction}
+                                style={{
+                                    '--walk-action-bg': action.bg,
+                                    '--walk-action-border': action.border,
+                                    '--walk-action-color': action.color,
+                                }}
+                            >
+                                <span className="walk-controller-action-icon" aria-hidden="true">
+                                    {isRecordingThisAction ? '⏳' : action.emoji}
+                                </span>
+                                <span>{isRecordingThisAction ? '記録中...' : action.label}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <p className="walk-controller-hint">
+                    現在地を取得できない場合は、地図から場所を選べます。
+                </p>
+                <div className="walk-controller-status" role="status" aria-live="polite">
+                    {recordingAction ? `現在地を確認して「${recordingAction.label}」を保存しています。` : ''}
+                </div>
+            </section>
         </div>
     );
 };
