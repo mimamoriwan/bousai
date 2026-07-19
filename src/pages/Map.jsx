@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import shelters from '../data/shelters.json';
 import { db, storage } from '../firebase';
 import { collection, addDoc, serverTimestamp, GeoPoint } from 'firebase/firestore';
-import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import PullToRefresh from 'react-simple-pull-to-refresh';
 import { BottomSheet } from 'react-spring-bottom-sheet';
 import 'react-spring-bottom-sheet/dist/style.css';
@@ -132,6 +132,7 @@ const MapPage = () => {
     const [showQuickPostSheet, setShowQuickPostSheet] = useState(false);
     const [quickPostStep, setQuickPostStep] = useState(1);
     const [quickPostData, setQuickPostData] = useState({ title: '', type: 'danger' });
+    const [quickPostStatus, setQuickPostStatus] = useState('');
     const [showSuccessToast, setShowSuccessToast] = useState(false);
 
     // 安全報告 / お散歩記録
@@ -150,6 +151,8 @@ const MapPage = () => {
     const { currentUser, currentUserHash, memberNumber } = useAuth();
 
     const mapRef = useRef(null);
+    const quickPostLockRef = useRef(false);
+    const quickPostImageLockRef = useRef(false);
     const markerRefs = useRef(new Map());
     const walkMarkerRefs = useRef(new Map());
     const [activePostId, setActivePostId] = useState(null);
@@ -310,8 +313,10 @@ const MapPage = () => {
 
     // ── クイック投稿の送信 ──
     const closeQuickPost = () => {
+        if (quickPostLockRef.current || quickPostImageLockRef.current || isProcessingImage) return;
         setShowQuickPostSheet(false);
         setQuickPostStep(1);
+        setQuickPostStatus('');
         setPostForm(prev => ({ ...prev, image: null }));
     };
 
@@ -464,8 +469,11 @@ const MapPage = () => {
     };
 
     const handleQuickPostSubmit = async (withPhoto = false, imageDataUrl = null) => {
-        if (!currentUser) return;
+        if (!currentUser || quickPostLockRef.current) return;
+        quickPostLockRef.current = true;
         setIsSubmitting(true);
+        setQuickPostStatus('現在地を確認中...');
+        let uploadedImageRef = null;
         try {
             let lat, lng;
             try {
@@ -489,6 +497,7 @@ const MapPage = () => {
             let imagePath = null;
             const finalImage = imageDataUrl || postForm.image;
             if (withPhoto && finalImage) {
+                setQuickPostStatus('写真を保存中...');
                 const mimeTypeMatch = finalImage.match(/data:(.*?);/);
                 const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
                 const ext = mimeType === 'image/webp' ? 'webp' : 'jpg';
@@ -497,8 +506,10 @@ const MapPage = () => {
                 await uploadString(storageRef, finalImage, 'data_url');
                 imageUrl = await getDownloadURL(storageRef);
                 imagePath = filename;
+                uploadedImageRef = storageRef;
             }
 
+            setQuickPostStatus('投稿を保存中...');
             await addDoc(collection(db, 'map_pins'), {
                 lat, lng,
                 type: quickPostData.type,
@@ -523,11 +534,21 @@ const MapPage = () => {
             setTimeout(() => setShowSuccessToast(false), 3000);
         } catch (error) {
             console.error('クイック投稿エラー:', error);
-            alert('投稿の保存に失敗しました。もう一度お試しください。');
+            if (uploadedImageRef) {
+                await deleteObject(uploadedImageRef).catch((cleanupError) => {
+                    console.error('未使用画像の削除失敗:', cleanupError);
+                });
+            }
+            const { default: toast } = await import('react-hot-toast');
+            toast.error('投稿の保存に失敗しました。内容を保ったまま、もう一度お試しください。');
         } finally {
+            quickPostLockRef.current = false;
             setIsSubmitting(false);
+            setQuickPostStatus('');
         }
     };
+
+    const isQuickPostBusy = isSubmitting || isProcessingImage;
 
     // ── 表示フィルタリング ──
     const displayPosts = userPosts.filter(post => {
@@ -1781,12 +1802,14 @@ const MapPage = () => {
                 <div style={{ padding: '16px 20px calc(100px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative' }}>
                     <button
                         onClick={closeQuickPost}
+                        disabled={isQuickPostBusy}
                         style={{
                             position: 'absolute', top: '12px', right: '20px',
                             background: '#F3F4F6', border: 'none', color: '#6B7280',
                             width: '32px', height: '32px', borderRadius: '50%',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '1rem', cursor: 'pointer', zIndex: 10
+                            fontSize: '1rem', cursor: isQuickPostBusy ? 'default' : 'pointer', zIndex: 10,
+                            opacity: isQuickPostBusy ? 0.45 : 1,
                         }}
                         aria-label="閉じる"
                     >
@@ -1821,7 +1844,12 @@ const MapPage = () => {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
                                 <button
                                     onClick={() => { setQuickPostStep(1); setPostForm(prev => ({ ...prev, image: null })); }}
-                                    style={{ background: 'none', border: 'none', color: '#6B7280', fontSize: '1.2rem', cursor: 'pointer', padding: '4px' }}
+                                    disabled={isQuickPostBusy}
+                                    style={{
+                                        background: 'none', border: 'none', color: '#6B7280', fontSize: '1.2rem',
+                                        cursor: isQuickPostBusy ? 'default' : 'pointer', padding: '4px',
+                                        opacity: isQuickPostBusy ? 0.45 : 1,
+                                    }}
                                 >
                                     ◀️ 戻る
                                 </button>
@@ -1831,27 +1859,28 @@ const MapPage = () => {
 
                             <button
                                 onClick={() => handleQuickPostSubmit(false)}
-                                disabled={isSubmitting}
+                                disabled={isQuickPostBusy}
+                                aria-busy={isSubmitting}
                                 style={{
                                     width: '100%', padding: '24px', borderRadius: '16px', border: 'none',
                                     backgroundColor: 'var(--color-primary)', color: 'white',
                                     fontSize: '1.4rem', fontWeight: 'bold',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
                                     boxShadow: '0 4px 12px rgba(249, 115, 22, 0.3)', cursor: 'pointer',
-                                    opacity: isSubmitting ? 0.7 : 1
+                                    opacity: isQuickPostBusy ? 0.7 : 1
                                 }}
                             >
-                                {isSubmitting ? '送信中...' : '🚀 このまま投稿する'}
+                                {isSubmitting ? quickPostStatus || '送信中...' : '🚀 このまま投稿する'}
                             </button>
 
                             <button
                                 onClick={() => startMapLocationSelection({ quickPost: quickPostData })}
-                                disabled={isSubmitting}
+                                disabled={isQuickPostBusy}
                                 style={{
                                     width: '100%', padding: '16px', borderRadius: '16px',
                                     border: '1px solid #FDBA74', backgroundColor: '#FFF7ED', color: '#C2410C',
                                     fontSize: '1.05rem', fontWeight: 'bold', cursor: 'pointer',
-                                    opacity: isSubmitting ? 0.7 : 1
+                                    opacity: isQuickPostBusy ? 0.7 : 1
                                 }}
                             >
                                 🗺️ 地図から投稿場所を選ぶ
@@ -1864,34 +1893,47 @@ const MapPage = () => {
                                     width: '100%', padding: '20px', borderRadius: '16px', border: '1px solid #D1D5DB',
                                     backgroundColor: 'white', color: '#4B5563', fontSize: '1.2rem', fontWeight: 'bold',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
-                                    cursor: 'pointer', margin: 0
+                                    cursor: isQuickPostBusy ? 'default' : 'pointer', margin: 0,
+                                    opacity: isQuickPostBusy ? 0.6 : 1,
                                 }}>
-                                    📷 写真を追加して投稿
+                                    {isProcessingImage ? '📷 写真を準備中...' : '📷 写真を追加して投稿'}
                                     <input
                                         type="file" accept="image/*,.heic,.heif"
                                         style={{ display: 'none' }}
                                         onChange={async (e) => {
-                                            const file = e.target.files[0];
+                                            const input = e.currentTarget;
+                                            const file = input.files[0];
                                             if (file) {
+                                                quickPostImageLockRef.current = true;
                                                 setIsProcessingImage(true);
+                                                setQuickPostStatus('写真を準備中...');
                                                 try {
                                                     const { compressImage } = await import('../utils/imageUtils');
                                                     const compressedDataUrl = await compressImage(file);
+                                                    setIsProcessingImage(false);
                                                     await handleQuickPostSubmit(true, compressedDataUrl);
                                                 } catch (error) {
                                                     console.error('画像圧縮失敗', error);
-                                                    alert('画像の処理に失敗しました。');
+                                                    const { default: toast } = await import('react-hot-toast');
+                                                    toast.error('写真を準備できませんでした。同じ写真をもう一度選べます。');
                                                 } finally {
+                                                    quickPostImageLockRef.current = false;
                                                     setIsProcessingImage(false);
+                                                    setQuickPostStatus('');
+                                                    input.value = '';
                                                 }
                                             }
                                         }}
-                                        disabled={isProcessingImage || isSubmitting}
+                                        disabled={isQuickPostBusy}
                                     />
                                 </label>
-                                {isProcessingImage && (
-                                    <div style={{ textAlign: 'center', color: 'var(--color-primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                                        処理中... そのままお待ち下さい
+                                {isQuickPostBusy && quickPostStatus && (
+                                    <div
+                                        role="status"
+                                        aria-live="polite"
+                                        style={{ textAlign: 'center', color: 'var(--color-primary)', fontSize: '0.9rem', fontWeight: 'bold' }}
+                                    >
+                                        {quickPostStatus} そのままお待ちください
                                     </div>
                                 )}
                             </div>
