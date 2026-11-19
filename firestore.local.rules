@@ -24,11 +24,27 @@ service cloud.firestore {
         && data.lng <= 180;
     }
 
+    function validPinDetails(data) {
+      let tags = data.get('tags', []);
+      return data.get('pinKind', 'alert') in ['alert', 'memo']
+        && data.get('locationPrecision', 'point') in ['point', 'area']
+        && data.get('isLitter', false) is bool
+        && tags is list
+        && tags.hasOnly(['地域', '春', '夏', '秋', '冬', '雨の日'])
+        && tags.size() == tags.toSet().size()
+        && (!('createdAt' in data) || data.createdAt == request.time)
+        && (!('observedAt' in data)
+          || (data.observedAt is int
+            && data.observedAt > 0
+            && data.observedAt <= request.time.toMillis() + 300000));
+    }
+
     function validMapPinCreate() {
       return request.resource.data.keys().hasOnly([
           'lat', 'lng', 'type', 'title', 'note', 'date', 'timestamp',
           'imageUrl', 'imagePath', 'resolved', 'thanks', 'savedBy',
-          'visibility', 'userHash', 'ownerUid'
+          'visibility', 'userHash', 'ownerUid', 'pinKind', 'tags',
+          'locationPrecision', 'isLitter', 'observedAt', 'createdAt'
         ])
         && request.resource.data.keys().hasAll([
           'lat', 'lng', 'type', 'title', 'note', 'date', 'timestamp',
@@ -36,6 +52,7 @@ service cloud.firestore {
         ])
         && request.resource.data.ownerUid == request.auth.uid
         && validCoordinates(request.resource.data)
+        && validPinDetails(request.resource.data)
         && request.resource.data.type is string
         && request.resource.data.type.size() > 0
         && request.resource.data.type.size() <= 50
@@ -77,24 +94,114 @@ service cloud.firestore {
           || request.resource.data[field].size() + 1 == resource.data[field].size());
     }
 
+    function pinPath(id) {
+      return /databases/$(database)/documents/map_pins/$(id);
+    }
+
+    function cleanupPath(id) {
+      return /databases/$(database)/documents/pinCleanups/$(id);
+    }
+
+    function receiptPath(id, uid) {
+      return /databases/$(database)/documents/pinCleanups/$(id)/thanks/$(uid);
+    }
+
+    function isOpenAlert(data) {
+      return data.visibility == 'public'
+        && (data.get('pinKind', null) == 'alert'
+          || (!('pinKind' in data) && data.type in ['danger', 'plant']))
+        && data.get('resolved', false) == false && data.get('cleanedAt', null) == null;
+    }
+
+    function isLitter(data) {
+      return data.type == 'danger' && data.get('isLitter', data.title == 'ゴミが落ちてるよ') == true;
+    }
+
+    function millis(value) {
+      return value is timestamp ? value.toMillis() : (value is int ? value : 0);
+    }
+
+    function canReconfirm(data) {
+      let created = millis(data.get('createdAt', null));
+      let postedMs = created > 0 ? created : millis(data.get('timestamp', null));
+      let age = request.time.toMillis() - postedMs;
+      return isOpenAlert(data) && data.get('confirmedAt', null) == null
+        && postedMs > 0
+        && age >= 86400000 && age <= 172800000
+        && request.resource.data.confirmedAt == request.time;
+    }
+
+    function validCleanupUpdate(id) {
+      let after = request.resource.data;
+      return changesOnly(['resolved', 'cleanedAt', 'cleanerUid'])
+        && isOpenAlert(resource.data) && isLitter(resource.data)
+        && after.resolved == true && after.cleanedAt == request.time
+        && after.cleanerUid == request.auth.uid
+        && !exists(cleanupPath(id))
+        && getAfter(cleanupPath(id)).data.cleanedAt == request.time;
+    }
+
     match /map_pins/{postId} {
       allow read: if resource.data.visibility == 'public'
         || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
 
-      allow create: if isSignedIn() && validMapPinCreate();
+      allow create: if isSignedIn() && validMapPinCreate()
+        && !exists(cleanupPath(postId));
 
       allow update: if isSignedIn() && (
-        (resource.data.ownerUid == request.auth.uid
+        (resource.data.get('ownerUid', null) == request.auth.uid
           && request.resource.data.ownerUid == resource.data.ownerUid
+          && resource.data.get('cleanedAt', null) == null
           && changesOnly(['resolved'])
           && request.resource.data.resolved is bool)
         || (changesOnly(['thanks']) && validInteraction('thanks'))
         || (changesOnly(['savedBy'])
           && validInteraction('savedBy'))
+        || (changesOnly(['confirmedAt']) && canReconfirm(resource.data))
+        || validCleanupUpdate(postId)
       );
 
       allow delete: if isSignedIn()
         && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /pinCleanups/{postId} {
+      function validCleanupCreate() {
+        let before = get(pinPath(postId)).data;
+        let after = getAfter(pinPath(postId)).data;
+        let entry = request.resource.data;
+        return isOpenAlert(before) && isLitter(before)
+          && after.cleanedAt == request.time && after.resolved == true
+          && after.cleanerUid == request.auth.uid
+          && entry.keys().hasOnly(['cleanerUid', 'title', 'cleanedAt', 'thanksCount'])
+          && entry.cleanerUid == request.auth.uid && entry.title == before.title
+          && entry.cleanedAt == request.time && entry.thanksCount == 0;
+      }
+
+      function validCleanupThanks() {
+        let receipt = receiptPath(postId, request.auth.uid);
+        return changesOnly(['thanksCount'])
+          && request.resource.data.thanksCount == resource.data.thanksCount + 1
+          && resource.data.cleanerUid != request.auth.uid
+          && exists(pinPath(postId))
+          && !exists(receipt) && getAfter(receipt).data.createdAt == request.time;
+      }
+
+      allow get: if (isSignedIn() && resource.data.cleanerUid == request.auth.uid)
+        || get(pinPath(postId)).data.visibility == 'public';
+      allow list: if isSignedIn() && resource.data.cleanerUid == request.auth.uid;
+      allow create: if isSignedIn() && validCleanupCreate();
+      allow update: if isSignedIn() && validCleanupThanks();
+
+      match /thanks/{uid} {
+        allow get: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['createdAt'])
+          && request.resource.data.createdAt == request.time
+          && get(cleanupPath(postId)).data.cleanerUid != uid
+          && getAfter(cleanupPath(postId)).data.thanksCount
+            == get(cleanupPath(postId)).data.thanksCount + 1;
+      }
     }
 
     match /users/{uid} {
