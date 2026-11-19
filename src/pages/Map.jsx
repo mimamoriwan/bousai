@@ -19,6 +19,7 @@ import WalkControllerSheet from '../components/map/WalkControllerSheet';
 import WalkHeatLayer from '../components/map/WalkHeatLayer';
 import MapActionSheet from '../components/map/MapActionSheet';
 import { isBrowserOnline, OFFLINE_WRITE_MESSAGE } from '../utils/networkStatus';
+import { isPostArchived } from '../utils/postFreshness';
 
 const DEFAULT_LOCATION = [36.0834, 140.0766];
 const toPublicSafetyCoordinate = (value) => Math.round(value * 1000) / 1000;
@@ -598,11 +599,7 @@ const MapPage = () => {
             if (filter === 'walk' && !post.type.startsWith('walk') && post.type !== 'useful') return false;
             if (filter !== 'all' && filter !== 'resolved' && filter !== 'walk' && post.type !== filter && !post.type.startsWith(filter)) return false;
 
-            const timeLimit = (filter === 'plant' && post.type === 'plant')
-                ? 14 * 24 * 60 * 60 * 1000
-                : 48 * 60 * 60 * 1000;
-            const isOld = post.timestamp ? (Date.now() - post.timestamp > timeLimit) : false;
-            if (!showArchived && isOld) return false;
+            if (!showArchived && isPostArchived(post, filter)) return false;
             return true;
         }
     });
@@ -1257,8 +1254,7 @@ const MapPage = () => {
                                         const isOwner = Boolean(
                                             currentUser && post.ownerUid === currentUser.uid
                                         );
-                                        const timeLimit = (filter === 'plant' && post.type === 'plant') ? 14 * 24 * 60 * 60 * 1000 : 48 * 60 * 60 * 1000;
-                                        const isOld = post.timestamp ? (Date.now() - post.timestamp > timeLimit) : false;
+                                        const isOld = isPostArchived(post, filter);
 
                                         return (
                                             <Marker
@@ -1548,8 +1544,7 @@ const MapPage = () => {
                                     const isOwner = Boolean(
                                         currentUser && post.ownerUid === currentUser.uid
                                     );
-                                    const timeLimit = (filter === 'plant' && post.type === 'plant') ? 14 * 24 * 60 * 60 * 1000 : 48 * 60 * 60 * 1000;
-                                    const isOld = post.timestamp ? (Date.now() - post.timestamp > timeLimit) : false;
+                                    const isOld = isPostArchived(post, filter);
                                     return (
                                         <div
                                             key={post.id}
