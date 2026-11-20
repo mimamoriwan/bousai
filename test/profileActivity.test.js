@@ -1,6 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { summarizeProfileActivity } from '../src/utils/profileActivity.js';
+import { collectActivityPosts, summarizeProfileActivity } from '../src/utils/profileActivity.js';
+
+test('隊員番号だけの旧公開投稿を本人の活動に一度だけ足し、非公開・他人・無印の投稿は除く', () => {
+    const old = { id: 'old', legacyActivity: true, visibility: 'public', memberNumber: 1, thanks: ['w'] };
+    const current = { id: 'current', uid: 'me', memberNumber: 1, visibility: 'public', thanks: ['a', 'b'] };
+    const owned = [current, { ...current, id: 'misattributed', ownerUid: 'other' }];
+    const archive = [old, current, { ...old, id: 'current' }, { ...old, id: 'stranger', memberNumber: 2 },
+        { ...old, id: 'unsigned', legacyActivity: false }, { ...old, id: 'private', visibility: 'private' },
+        { ...old, id: 'other-uid', uid: 'other' }];
+    const posts = collectActivityPosts(owned, archive, 'me', 1);
+    assert.deepEqual(posts, [old, current]);
+    assert.equal(summarizeProfileActivity(posts, []).postThanks, 3);
+    assert.deepEqual(collectActivityPosts(owned, archive, 'me', null), [current]);
+});
 
 test('同じ場所の投稿と清掃をそれぞれ記録し、感謝を行動別に集計する', () => {
     const posts = [{ id: 'west-gate', title: '西口のごみ', timestamp: 100, thanks: ['a', 'b'] }];

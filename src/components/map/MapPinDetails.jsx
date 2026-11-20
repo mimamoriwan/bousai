@@ -1,3 +1,4 @@
+import PrivatePinPhoto from './PrivatePinPhoto';
 import { canCleanPin, canReconfirmPin } from '../../utils/postFreshness';
 import { ownsPin, ownReactionIds } from '../../utils/pinIdentity';
 
@@ -13,6 +14,8 @@ export default function MapPinDetails({ post, presentation, now, uid, userHash, 
     const area = post.locationPrecision === 'area';
     const memo = post.pinKind === 'memo';
     const isOwner = ownsPin(post, uid);
+    const privatePhoto = isOwner && post.visibility === 'private'
+        && post.imagePath?.startsWith(`private_map_pins/${uid}/`);
     const saved = ownReactionIds(post.savedBy, uid, userHash).length > 0;
     const authorThanked = ownReactionIds(post.thanks, uid, userHash).length > 0;
     const detailed = !onOpen || selected;
@@ -38,13 +41,15 @@ export default function MapPinDetails({ post, presentation, now, uid, userHash, 
             className={`pin-details ${onOpen ? 'pin-card' : 'pin-popup'} phase-${phase}${area ? ' pin-area' : ''}${selected ? ' is-selected' : ''}`}>
             {onOpen ? <button type="button" className="pin-open" onClick={() => onOpen(post)} aria-expanded={selected}>
                 {summary}
-                {post.imageUrl && !detailed && <span className="pin-photo-label">📷 写真あり</span>}
+                {(privatePhoto || post.imageUrl) && !detailed && <span className="pin-photo-label">📷 写真あり</span>}
             </button> : summary}
             {detailed && <div className="pin-author">
                 {post.memberNumber ? `みまもり隊員 No.${String(post.memberNumber).padStart(3, '0')} の投稿` : 'ゲスト隊員の投稿'}
                 {post.visibility === 'private' && ' · 自分だけ'}
             </div>}
-            {detailed && post.imageUrl && <img className="pin-photo" src={post.imageUrl} alt="投稿の添付写真" loading="lazy" />}
+            {detailed && (privatePhoto
+                ? <PrivatePinPhoto key={post.imagePath} path={post.imagePath} />
+                : post.imageUrl && <img className="pin-photo" src={post.imageUrl} alt="投稿の添付写真" loading="lazy" />)}
             <div className="pin-actions">
                 {allowActivity && canReconfirmPin(post, now) &&
                     <button type="button" disabled={busy} onClick={() => actions.run('reconfirm', post)}>まだあった</button>}

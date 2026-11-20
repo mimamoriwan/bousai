@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, or, query, where } from 'firebase/firestore';
-import { ownsPin } from '../utils/pinIdentity';
+import { and, collection, onSnapshot, or, query, where } from 'firebase/firestore';
 import { MdCleaningServices, MdFavorite, MdLocationOn, MdPets } from 'react-icons/md';
 import { db } from '../firebase';
-import { summarizeProfileActivity } from '../utils/profileActivity';
+import { collectActivityPosts, summarizeProfileActivity } from '../utils/profileActivity';
 import './ProfileActivity.css';
 
 function ActivityStat({ label, icon: Icon, value, unit, tone, children }) {
@@ -40,8 +39,9 @@ function ActivityRow({ activity }) {
     );
 }
 
-export default function ProfileActivity({ uid }) {
-    const [posts, setPosts] = useState(null);
+export default function ProfileActivity({ uid, memberNumber }) {
+    const [ownedPosts, setOwnedPosts] = useState(null);
+    const [archivedPosts, setArchivedPosts] = useState(null);
     const [cleanups, setCleanups] = useState(null);
     const [walkCount, setWalkCount] = useState(null);
     const [failed, setFailed] = useState(false);
@@ -58,17 +58,23 @@ export default function ProfileActivity({ uid }) {
             ...item.data({ serverTimestamps: 'estimate' }),
             id: item.id,
         }));
-        const ownedPosts = or(where('ownerUid', '==', uid), where('uid', '==', uid));
-        const stopPosts = watch('map_pins', ownedPosts, snapshot => setPosts(readRows(snapshot).filter(post => ownsPin(post, uid))));
+        const owner = or(where('ownerUid', '==', uid), where('uid', '==', uid));
+        const stopPosts = watch('map_pins', owner, snapshot => setOwnedPosts(readRows(snapshot)));
+        const stopArchive = memberNumber && watch('map_pins',
+            and(where('visibility', '==', 'public'), where('memberNumber', '==', memberNumber)),
+            snapshot => setArchivedPosts(readRows(snapshot)));
         const stopCleanups = watch('pinCleanups', where('cleanerUid', '==', uid), snapshot => setCleanups(readRows(snapshot)));
         const stopWalks = watch('walkActions', where('uid', '==', uid), snapshot => setWalkCount(snapshot.size));
         return () => {
             stopPosts();
+            if (stopArchive) stopArchive();
             stopCleanups();
             stopWalks();
         };
-    }, [uid]);
+    }, [uid, memberNumber]);
 
+    const posts = ownedPosts && (!memberNumber || archivedPosts)
+        ? collectActivityPosts(ownedPosts, archivedPosts ?? [], uid, memberNumber) : null;
     const { postThanks, cleanupThanks, recent } = summarizeProfileActivity(posts ?? [], cleanups ?? []);
     const totalThanks = posts && cleanups ? postThanks + cleanupThanks : null;
     return (

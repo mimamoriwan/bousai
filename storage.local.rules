@@ -17,13 +17,19 @@ service firebase.storage {
     }
 
     match /map_pins/{uid}/{fileName} {
-      allow read: if true;
+      allow get: if true;
       allow create, update: if isOwner(uid) && isSafeImage(5 * 1024 * 1024);
       allow delete: if isOwner(uid);
     }
 
+    match /private_map_pins/{uid}/{fileName} {
+      allow get, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isSafeImage(5 * 1024 * 1024);
+    }
+
+    // 旧版の map_pins/{timestamp}.jpg は既存投稿に保存済みのリンクで表示する。
     match /user_photos/{fileName} {
-      allow read: if true;
+      allow get: if isGoogleUser() && fileName.matches(request.auth.uid + '_.*');
       allow create, update: if isGoogleUser()
         && fileName.matches(request.auth.uid + '_.*')
         && isSafeImage(3 * 1024 * 1024);

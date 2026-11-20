@@ -53,7 +53,9 @@ service cloud.firestore {
     function validPinImagePath(data) {
       let path = data.get('imagePath', null);
       return path == null || (path is string && (
-        path.matches('map_pins/' + request.auth.uid + '/[^/]+')
+        (data.visibility == 'public' && path.matches('map_pins/' + request.auth.uid + '/[^/]+'))
+        || (data.visibility == 'private' && data.get('imageUrl', null) == null
+          && path.matches('private_map_pins/' + request.auth.uid + '/[^/]+'))
         || (!('ownerUid' in data) && path.matches('map_pins/[0-9]+[.](jpg|jpeg|png|webp)'))
       ));
     }

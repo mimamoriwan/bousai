@@ -81,6 +81,26 @@ try {
     await setDoc(pin(owner, legacyPrivate), { ...legacy, visibility: 'private' });
     await setDoc(pin(owner, legacyPublic), { ...legacy, title: legacyTitle });
     const currentPrivate = await createPin(owner, 'current-private', { memberNumber: 1, visibility: 'private' });
+    const earlyPublic = `beta-public-${runId}`;
+    pins.add(earlyPublic);
+    const earlyData = { ...legacy, legacyActivity: true };
+    delete earlyData.uid;
+    await admin.doc(`map_pins/${earlyPublic}`).set(earlyData);
+    const profileQuery = query(collection(walker.db, 'map_pins'),
+        and(where('visibility', '==', 'public'), where('memberNumber', '==', 1)));
+    const attributed = await getDocs(profileQuery);
+    assert.ok(attributed.docs.some(item => item.id === earlyPublic));
+    assert.ok(!attributed.docs.some(item => item.id === currentPrivate || item.id === legacyPrivate));
+    await denied(createPin(owner, 'invalid-marker', { legacyActivity: true }), '旧版実績の印は新規投稿に付けられない');
+    await denied(updateDoc(pin(owner, legacyPublic), { legacyActivity: true }), '既存の投稿に旧版実績の印を追加できない');
+    const ownProfile = admin.doc(`users/${walker.uid}`);
+    await ownProfile.set({ memberNumber: 1 });
+    try {
+        await denied(updateDoc(pin(walker, earlyPublic), { resolved: true }), '隊員番号の一致は解決の権限にならない');
+        await denied(deleteDoc(pin(walker, earlyPublic)), '隊員番号の一致は削除の権限にならない');
+    } finally {
+        await ownProfile.delete();
+    }
     const ownFilter = or(where('ownerUid', '==', owner.uid), where('uid', '==', owner.uid));
     for (const filter of [ownFilter, and(ownFilter, where('visibility', '==', 'private'))]) {
         const snapshot = await getDocs(query(collection(owner.db, 'map_pins'), filter));

@@ -12,10 +12,11 @@ export async function createPin(draft, position, user, onProgress) {
         if (draft.image) {
             onProgress?.('写真を保存中...');
             const ext = draft.image.startsWith('data:image/webp;') ? 'webp' : 'jpg';
-            const file = ref(storage, `map_pins/${user.uid}/${pin.id}.${ext}`);
+            const folder = data.visibility === 'private' ? 'private_map_pins' : 'map_pins';
+            const file = ref(storage, `${folder}/${user.uid}/${pin.id}.${ext}`);
             await uploadString(file, draft.image, 'data_url');
             uploadedImage = file;
-            imageUrl = await getDownloadURL(file);
+            if (data.visibility === 'public') imageUrl = await getDownloadURL(file);
         }
         onProgress?.('投稿を保存中...');
         await setDoc(pin, { ...data, createdAt: serverTimestamp(), imageUrl, imagePath: uploadedImage?.fullPath ?? null });

@@ -12,6 +12,7 @@ import ProfileActivity from '../components/ProfileActivity';
 const Profile = () => {
     const {
         currentUser,
+        memberNumber,
         linkWithGoogle,
         loginWithGoogle,
         loginAnonymously,
@@ -764,7 +765,8 @@ const Profile = () => {
                 </button>
             </div>
 
-            <ProfileActivity key={currentUser.uid} uid={currentUser.uid} />
+            <ProfileActivity key={`${currentUser.uid}:${memberNumber ?? ''}`} uid={currentUser.uid}
+                memberNumber={currentUser.isAnonymous ? null : memberNumber} />
 
             <button onClick={logout} className="btn" style={{ width: '100%', marginTop: 'var(--spacing-md)', backgroundColor: '#F3F4F6', color: '#4B5563', border: 'none' }}>
                 ログアウト
