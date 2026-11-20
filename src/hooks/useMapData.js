@@ -21,7 +21,7 @@ export const useMapData = () => {
         : [];
 
     const normalizePins = (snapshot) => snapshot.docs.map((docSnap) => {
-        const data = docSnap.data();
+        const data = docSnap.data({ serverTimestamps: 'estimate' });
         return {
             id: docSnap.id,
             ...data,
@@ -191,7 +191,7 @@ export const useMapData = () => {
 
     /** 解決済みとしてマーク */
     const handleResolve = async (postId) => {
-        if (!window.confirm('このスポットの状況は「解決済み（安全）」になりましたか？\n※マップ上の表示がグレーに変わります。')) return;
+        if (!window.confirm('この投稿を解決済みにしますか？\n解決済みの投稿は「記録」で確認できます。')) return;
         try {
             await updateDoc(doc(db, 'map_pins', postId), { resolved: true });
         } catch (error) {

@@ -28,8 +28,6 @@ const MapActionSheet = ({
     onSelectPublicMap,
     onSelectMyMap,
     isAnonymous,
-    showArchived,
-    onToggleArchived,
 }) => {
     const firstActionRef = useRef(null);
     const sheetRef = useRef(null);
@@ -132,16 +130,6 @@ const MapActionSheet = ({
                             </p>
                         )}
 
-                        {activeMapLayer === 'public' && (
-                            <button
-                                type="button"
-                                className={`map-archive-toggle${showArchived ? ' is-active' : ''}`}
-                                onClick={onToggleArchived}
-                                aria-pressed={showArchived}
-                            >
-                                🕒 過去情報: {showArchived ? 'ON' : 'OFF'}
-                            </button>
-                        )}
                     </div>
                 </div>
             </section>
