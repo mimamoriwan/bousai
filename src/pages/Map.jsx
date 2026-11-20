@@ -164,7 +164,10 @@ const MapPage = () => {
     const isSelectingWalkLocation = Boolean(pendingWalkAction);
     const isSelectingAnyLocation = isSelectingLocation || isSelectingSafetyLocation || isSelectingWalkLocation;
 
-    const { currentUser, currentUserHash } = useAuth();
+    const { currentUser, currentUserHash, memberNumber } = useAuth();
+    const postAuthor = currentUser && {
+        uid: currentUser.uid, hash: currentUserHash, memberNumber: currentUser.isAnonymous ? null : memberNumber,
+    };
 
     const mapRef = useRef(null);
     const quickPostLockRef = useRef(false);
@@ -295,7 +298,7 @@ const MapPage = () => {
         regularPostLockRef.current = true;
         setIsSubmitting(true);
         try {
-            await createPin(postForm, tempPost, { uid: currentUser.uid, hash: currentUserHash });
+            await createPin(postForm, tempPost, postAuthor);
             setTempPost(null);
             setIsSelectingLocation(false);
             setPostForm(EMPTY_PIN_DRAFT);
@@ -487,7 +490,7 @@ const MapPage = () => {
             }
 
             const draft = quickPinDraft(quickPostData, withPhoto ? (imageDataUrl || postForm.image) : null);
-            await createPin(draft, { lat, lng }, { uid: currentUser.uid, hash: currentUserHash }, setQuickPostStatus);
+            await createPin(draft, { lat, lng }, postAuthor, setQuickPostStatus);
 
             setShowQuickPostSheet(false);
             setQuickPostStep(1);

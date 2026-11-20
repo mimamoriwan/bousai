@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { ownsPin, ownReactionIds } from '../utils/pinIdentity';
 import { db, storage } from '../firebase';
 import {
-    collection, deleteDoc, doc, onSnapshot, query,
+    collection, deleteDoc, doc, onSnapshot, or, query, runTransaction,
     updateDoc, arrayUnion, arrayRemove, getDocs, where, Timestamp
 } from 'firebase/firestore';
 import { ref, deleteObject } from 'firebase/storage';
+
+function ownPinQuery(uid) {
+    return query(collection(db, 'map_pins'), or(where('ownerUid', '==', uid), where('uid', '==', uid)));
+}
 
 /**
  * Firestoreのmap_pinsとsafetyReportsをリアルタイムで購読し、
@@ -25,19 +30,19 @@ export const useMapData = () => {
         return {
             id: docSnap.id,
             ...data,
-            visibility: data.visibility || 'public',
+            visibility: data.visibility || 'private',
             savedBy: Array.isArray(data.savedBy) ? data.savedBy : [],
             thanks: Array.isArray(data.thanks) ? data.thanks : []
         };
     });
 
-    // 公開投稿と自分の非公開投稿だけを購読する
+    // 公開投稿と自分の投稿を購読し、両方に含まれる投稿はIDでまとめる
     useEffect(() => {
         let publicPins = [];
-        let privatePins = [];
+        let ownedPins = [];
         const syncPins = () => {
             const merged = new Map(
-                [...publicPins, ...privatePins].map((pin) => [pin.id, pin])
+                [...publicPins, ...ownedPins].map((pin) => [pin.id, pin])
             );
             setUserPosts([...merged.values()]);
         };
@@ -53,15 +58,10 @@ export const useMapData = () => {
             console.error('公開map_pins 取得エラー:', error);
         });
 
-        let unsubscribePrivate = () => {};
+        let unsubscribeOwned = () => {};
         if (currentUser) {
-            const privateQuery = query(
-                collection(db, 'map_pins'),
-                where('ownerUid', '==', currentUser.uid),
-                where('visibility', '==', 'private')
-            );
-            unsubscribePrivate = onSnapshot(privateQuery, (snapshot) => {
-                privatePins = normalizePins(snapshot);
+            unsubscribeOwned = onSnapshot(ownPinQuery(currentUser.uid), (snapshot) => {
+                ownedPins = normalizePins(snapshot).filter(pin => ownsPin(pin, currentUser.uid));
                 syncPins();
             }, (error) => {
                 console.error('自分の非公開map_pins 取得エラー:', error);
@@ -70,7 +70,7 @@ export const useMapData = () => {
 
         return () => {
             unsubscribePublic();
-            unsubscribePrivate();
+            unsubscribeOwned();
         };
     }, [currentUser]);
 
@@ -120,11 +120,7 @@ export const useMapData = () => {
                 where('visibility', '==', 'public')
             ))];
             if (currentUser) {
-                pinRequests.push(getDocs(query(
-                    collection(db, 'map_pins'),
-                    where('ownerUid', '==', currentUser.uid),
-                    where('visibility', '==', 'private')
-                )));
+                pinRequests.push(getDocs(ownPinQuery(currentUser.uid)));
             }
             const [snapshots, walkSnapshot] = await Promise.all([
                 Promise.all(pinRequests),
@@ -136,7 +132,9 @@ export const useMapData = () => {
                     : Promise.resolve(null),
             ]);
             const merged = new Map(
-                snapshots.flatMap(normalizePins).map((pin) => [pin.id, pin])
+                snapshots.flatMap(normalizePins)
+                    .filter(pin => pin.visibility === 'public' || ownsPin(pin, currentUser?.uid))
+                    .map(pin => [pin.id, pin])
             );
             setUserPosts([...merged.values()]);
             if (walkSnapshot) {
@@ -153,41 +151,31 @@ export const useMapData = () => {
         }
     };
 
-    /** ありがとう（💖）のトグル */
-    const handleThanks = async (postId, currentThanks) => {
-        if (!currentUser || !currentUserHash) return;
+    // Toggle the desired state shown to the user. Read both identifier formats
+    // inside the transaction so concurrent taps cannot create a second reaction.
+    const toggleReaction = async (postId, field, displayed) => {
+        const uid = currentUser?.uid;
+        if (!uid || !currentUserHash) return;
         const postRef = doc(db, 'map_pins', postId);
-        const hasThanked = currentThanks?.includes(currentUserHash);
+        const shouldAdd = ownReactionIds(displayed, uid, currentUserHash).length === 0;
         try {
-            await updateDoc(postRef, {
-                thanks: hasThanked
-                    ? arrayRemove(currentUserHash)
-                    : arrayUnion(currentUserHash)
+            await runTransaction(db, async transaction => {
+                const snapshot = await transaction.get(postRef);
+                if (!snapshot.exists()) return;
+                const current = ownReactionIds(snapshot.data()[field], uid, currentUserHash);
+                const alreadySet = current.length > 0;
+                if (alreadySet === shouldAdd) return;
+                const update = shouldAdd ? arrayUnion(currentUserHash) : arrayRemove(...current);
+                transaction.update(postRef, { [field]: update });
             });
         } catch (error) {
-            console.error('thanks 更新エラー:', error);
+            console.error('投稿への反応の更新に失敗しました:', error);
+            alert('変更を保存できませんでした。接続を確認してもう一度お試しください。');
         }
     };
 
-    /** マイマップへの保存トグル */
-    const handleSavePost = async (postId, currentSavedBy) => {
-        if (!currentUser) {
-            alert('ゲスト情報を準備中です。少し待ってからもう一度お試しください。');
-            return;
-        }
-        if (!currentUserHash) return;
-        const postRef = doc(db, 'map_pins', postId);
-        const hasSaved = (currentSavedBy || []).includes(currentUserHash);
-        try {
-            await updateDoc(postRef, {
-                savedBy: hasSaved
-                    ? arrayRemove(currentUserHash)
-                    : arrayUnion(currentUserHash)
-            });
-        } catch (error) {
-            console.error('マイマップ保存トグルエラー:', error);
-        }
-    };
+    const handleThanks = (postId, thanks) => toggleReaction(postId, 'thanks', thanks);
+    const handleSavePost = (postId, savedBy) => toggleReaction(postId, 'savedBy', savedBy);
 
     /** 解決済みとしてマーク */
     const handleResolve = async (postId) => {

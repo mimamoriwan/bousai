@@ -1,4 +1,5 @@
 import { deleteApp, initializeApp } from 'firebase/app';
+import { hashUid } from '../src/utils/hashUtils.js';
 import { createRequire } from 'node:module';
 import {
     connectAuthEmulator,
@@ -90,7 +91,7 @@ const assertRejected = async (label, operation) => {
     throw new Error(`${label}: 拒否されるべき操作が成功しました。`);
 };
 
-const mapPinData = (uid, visibility) => ({
+const mapPinData = async (uid, visibility) => ({
     lat: 35.6722,
     lng: 139.7364,
     type: 'danger',
@@ -104,7 +105,7 @@ const mapPinData = (uid, visibility) => ({
     thanks: [],
     savedBy: [],
     visibility,
-    userHash: `hash-${uid}`,
+    userHash: await hashUid(uid),
     ownerUid: uid,
 });
 
@@ -131,8 +132,8 @@ try {
 
     publicPinRef = doc(owner.db, 'map_pins', `public-${suffix}`);
     privatePinRef = doc(owner.db, 'map_pins', `private-${suffix}`);
-    await setDoc(publicPinRef, mapPinData(ownerUid, 'public'));
-    await setDoc(privatePinRef, mapPinData(ownerUid, 'private'));
+    await setDoc(publicPinRef, await mapPinData(ownerUid, 'public'));
+    await setDoc(privatePinRef, await mapPinData(ownerUid, 'private'));
     console.log('✓ 公開・非公開のゲスト投稿作成');
 
     const publicPin = await getDoc(doc(reader.db, 'map_pins', publicPinRef.id));
@@ -155,12 +156,12 @@ try {
         deleteDoc(doc(attacker.db, 'map_pins', publicPinRef.id))
     );
 
+    const guestHash = await hashUid(attackerUid);
     await updateDoc(doc(attacker.db, 'map_pins', publicPinRef.id), {
-        thanks: arrayUnion(`hash-${attackerUid}`),
+        thanks: arrayUnion(guestHash),
     });
     console.log('✓ ゲストによる「ありがとう」追加');
 
-    const guestHash = `hash-${attackerUid}`;
     await updateDoc(doc(attacker.db, 'map_pins', publicPinRef.id), {
         savedBy: arrayUnion(guestHash),
     });
@@ -320,7 +321,7 @@ try {
     const guestUidBeforeLink = linkGuestCredential.user.uid;
     linkedPrivatePinRef = doc(linkGuest.db, 'map_pins', `linked-private-${suffix}`);
     linkedWalkActionRef = doc(linkGuest.db, 'walkActions', `linked-walk-${suffix}`);
-    await setDoc(linkedPrivatePinRef, mapPinData(guestUidBeforeLink, 'private'));
+    await setDoc(linkedPrivatePinRef, await mapPinData(guestUidBeforeLink, 'private'));
     await setDoc(linkedWalkActionRef, {
         uid: guestUidBeforeLink,
         actionType: 'sniff',

@@ -23,3 +23,9 @@ test('非公開のメモは選んだ地点・複数タグ・明示した観察�
     assert.equal(pin.observedAt, Date.UTC(2026, 10, 19));
     assert.equal(pin.isLitter, false);
 });
+
+test('registered authors keep their member badge and guests omit the member number', () => {
+    const draft = quickPinDraft({ type: 'danger', title: 'ゴミが落ちてるよ' });
+    assert.equal(buildNewPin(draft, position, { ...user, memberNumber: 1 }, time).memberNumber, 1);
+    assert.equal(buildNewPin(draft, position, user, time).memberNumber, undefined);
+});

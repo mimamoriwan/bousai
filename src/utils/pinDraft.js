@@ -22,6 +22,7 @@ export function buildNewPin(draft, position, user, timestamp = Date.now()) {
         locationPrecision: draft.locationPrecision,
         resolved: false, thanks: [], savedBy: [],
     };
+    if (user.memberNumber) pin.memberNumber = user.memberNumber;
     if (!pin.title) throw new Error('タイトルを入力してください。');
     if (draft.observedLocal) {
         const observedAt = new Date(draft.observedLocal).getTime();

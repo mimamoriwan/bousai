@@ -4,9 +4,10 @@ import { createRequire } from 'node:module';
 import { deleteApp, initializeApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, signInAnonymously } from 'firebase/auth';
 import {
-    arrayUnion, collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs,
-    getFirestore, query, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch,
+    arrayRemove, arrayUnion, collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs,
+    getFirestore, or, query, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch,
 } from 'firebase/firestore';
+import { hashUid } from '../src/utils/hashUtils.js';
 import { cleanPin, reconfirmPin, thankCleanup } from '../src/services/pinActivity.js';
 
 const projectId = 'demo-tsukuba-pet-bousai';
@@ -70,6 +71,47 @@ function writeThanks(user, id, { uid = user.uid, thanksCount = 1, createdAt = se
 try {
     const [owner, walker, neighbor] = await Promise.all(['owner', 'walker', 'neighbor'].map(client));
     const legacyTitle = 'ゴミが落ちてるよ';
+    const legacyPrivate = `march-private-${runId}`;
+    const legacyPublic = `march-public-${runId}`;
+    // 3月の本番版が書いた uid / memberNumber 形式を、旧PWAからの投稿も含め再現する。
+    const legacy = pinData(owner, { uid: owner.uid, memberNumber: 1, imagePath: 'map_pins/1773910000000.jpg' });
+    delete legacy.ownerUid;
+    pins.add(legacyPrivate);
+    pins.add(legacyPublic);
+    await setDoc(pin(owner, legacyPrivate), { ...legacy, visibility: 'private' });
+    await setDoc(pin(owner, legacyPublic), { ...legacy, title: legacyTitle });
+    const currentPrivate = await createPin(owner, 'current-private', { memberNumber: 1, visibility: 'private' });
+    const ownFilter = or(where('ownerUid', '==', owner.uid), where('uid', '==', owner.uid));
+    for (const filters of [[ownFilter], [ownFilter, where('visibility', '==', 'private')]]) {
+        const snapshot = await getDocs(query(collection(owner.db, 'map_pins'), ...filters));
+        assert.ok(snapshot.docs.some(item => item.id === legacyPrivate));
+        assert.ok(snapshot.docs.some(item => item.id === currentPrivate));
+    }
+    await denied(getDoc(pin(walker, legacyPrivate)), '他人の旧形式非公開投稿を読めない');
+    await denied(getDocs(query(collection(walker.db, 'map_pins'), where('uid', '==', owner.uid))), '他人に紐づく全投稿を取得できない');
+    await denied(getDocs(query(collection(walker.db, 'map_pins'), where('memberNumber', '==', 1))), '隊員番号で非公開投稿を取得できない');
+    await denied(setDoc(pin(walker, legacyPublic + '-new'), legacy), '他人のUIDを旧形式の投稿に指定できない');
+    await denied(setDoc(pin(walker, legacyPublic + '-mixed'), { ...legacy, ownerUid: walker.uid }), '新旧形式で投稿者を偽装できない');
+    await denied(updateDoc(pin(walker, legacyPublic), { uid: walker.uid }), '旧形式の投稿者を変更できない');
+    await denied(deleteDoc(pin(walker, legacyPrivate)), '旧形式の投稿を削除できるのは本人');
+    await updateDoc(pin(owner, legacyPrivate), { resolved: true });
+    await deleteDoc(pin(owner, legacyPrivate));
+
+    const alias = await hashUid(walker.uid);
+    for (const field of ['thanks', 'savedBy']) {
+        await updateDoc(pin(owner, legacyPublic), { [field]: arrayUnion(owner.uid) });
+        await updateDoc(pin(walker, legacyPublic), { [field]: arrayUnion(walker.uid) });
+        await denied(updateDoc(pin(walker, legacyPublic), { [field]: arrayUnion(alias) }), '新旧の識別子で同じ人を二重に数えない');
+        await denied(updateDoc(pin(walker, legacyPublic), { [field]: arrayRemove(owner.uid) }), '他人の反応を取り消せない');
+        await denied(updateDoc(pin(neighbor, legacyPublic), { [field]: [neighbor.uid] }), '他人の反応を置き換えられない');
+        await updateDoc(pin(walker, legacyPublic), { [field]: arrayRemove(walker.uid) });
+        await updateDoc(pin(walker, legacyPublic), { [field]: arrayUnion(alias) });
+        await denied(updateDoc(pin(walker, legacyPublic), { [field]: arrayUnion(neighbor.uid) }), '他人の反応を追加できない');
+        await admin.doc(`map_pins/${legacyPublic}`).update({ [field]: [owner.uid, walker.uid, alias] });
+        await updateDoc(pin(walker, legacyPublic), { [field]: arrayRemove(walker.uid, alias) });
+        assert.deepEqual((await getDoc(pin(owner, legacyPublic))).data()[field], [owner.uid], '既に混在した本人分だけを取り消す');
+    }
+    console.log('✓ 本番旧形式の公開・非公開ピンと隊員番号、本人の反応のみの切り替え');
     for (const overrides of [
         { pinKind: 'unknown' }, { tags: ['登録外'] }, { tags: '春' },
         { locationPrecision: 'unknown' }, { isLitter: 'true' }, { confirmedAt: serverTimestamp() },
@@ -144,7 +186,7 @@ try {
     const id = await createPin(owner, 'new-litter', {
         title: newTitle, isLitter: true, pinKind: 'alert', tags: ['地域', '秋'], locationPrecision: 'point',
     });
-    await updateDoc(pin(walker, id), { thanks: arrayUnion('original-thanks') });
+    await updateDoc(pin(walker, id), { thanks: arrayUnion(walker.uid) });
     await denied(updateDoc(pin(walker, id), { resolved: true, cleanedAt: serverTimestamp(), cleanerUid: walker.uid }), '清掃記録とピンがそろう');
     await denied(setDoc(ledger(walker, id), { title: newTitle, cleanerUid: walker.uid, cleanedAt: serverTimestamp(), thanksCount: 0 }), '清掃記録単独で作れない');
     await denied(writeCleanup(walker, id, '別のタイトル'), '清掃対象のタイトルと一致する');
@@ -160,7 +202,7 @@ try {
     const activity = (await getDoc(ledger(cleaner, id))).data();
     assert.equal(cleanedPin.cleanerUid, cleaner.uid);
     assert.equal(cleanedPin.resolved, true);
-    assert.deepEqual(cleanedPin.thanks, ['original-thanks']);
+    assert.deepEqual(cleanedPin.thanks, [walker.uid]);
     assert.equal(activity.cleanerUid, cleaner.uid);
     assert.equal(activity.title, newTitle);
     assert.ok(activity.cleanedAt.isEqual(cleanedPin.cleanedAt));
@@ -185,7 +227,7 @@ try {
     assert.ok((await getDoc(receipt(owner, id))).data().createdAt instanceof Timestamp);
     await denied(getDoc(receipt(other, id, owner.uid)), '他人のお礼の受領記録は非公開');
     await denied(deleteDoc(receipt(owner, id)), '受領記録は削除できない');
-    assert.deepEqual((await getDoc(pin(owner, id))).data().thanks, ['original-thanks']);
+    assert.deepEqual((await getDoc(pin(owner, id))).data().thanks, [walker.uid]);
 
     await deleteDoc(pin(owner, id));
     await denied(getDoc(ledger(other, id)), '削除後のタイトルを第三者が読めない');

@@ -1,4 +1,5 @@
 import { canCleanPin, canReconfirmPin } from '../../utils/postFreshness';
+import { ownsPin, ownReactionIds } from '../../utils/pinIdentity';
 
 const pinSymbols = { danger: '⚠️', plant: '🌿', others: '💡', shelter: '🎒' };
 const eventDate = new Intl.DateTimeFormat('ja-JP', {
@@ -11,9 +12,9 @@ export default function MapPinDetails({ post, presentation, now, uid, userHash, 
     const cleaned = Boolean(post.cleanedAt && post.cleanerUid);
     const area = post.locationPrecision === 'area';
     const memo = post.pinKind === 'memo';
-    const isOwner = uid && post.ownerUid === uid;
-    const saved = Boolean(userHash && post.savedBy?.includes(userHash));
-    const authorThanked = Boolean(userHash && post.thanks?.includes(userHash));
+    const isOwner = ownsPin(post, uid);
+    const saved = ownReactionIds(post.savedBy, uid, userHash).length > 0;
+    const authorThanked = ownReactionIds(post.thanks, uid, userHash).length > 0;
     const detailed = !onOpen || selected;
     const allowActivity = detailed && uid && post.visibility === 'public';
     const busy = actions.busyPin !== null;

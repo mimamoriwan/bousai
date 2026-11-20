@@ -1,4 +1,5 @@
 import { getPinPresentation, isSeasonalMemoActive, pinMatchesTag } from './postFreshness.js';
+import { ownsPin, ownReactionIds } from './pinIdentity.js';
 
 function matchesCategory(post, filter) {
     if (filter === 'all') return true;
@@ -16,10 +17,11 @@ export function selectVisibleMapPins(posts, { activeMapLayer, uid, userHash, fil
         const presentation = getPinPresentation(post, now, filter);
         if (personal) {
             if (!uid) continue;
-            if (post.visibility === 'private' && post.ownerUid !== uid) continue;
-            const owned = post.ownerUid ? post.ownerUid === uid : Boolean(userHash && post.userHash === userHash);
-            const saved = post.visibility !== 'private' && userHash && post.savedBy?.includes(userHash);
-            if (!owned && !saved) continue;
+            const owned = ownsPin(post, uid);
+            if (post.visibility === 'private' && !owned) continue;
+            const hashOnly = !Object.hasOwn(post, 'ownerUid') && !post.uid && userHash && post.userHash === userHash;
+            const saved = ownReactionIds(post.savedBy, uid, userHash).length > 0;
+            if (!owned && !saved && !hashOnly) continue;
         } else {
             if (post.visibility === 'private') continue;
             const phase = presentation.phase;

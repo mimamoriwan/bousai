@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, or, query, where } from 'firebase/firestore';
+import { ownsPin } from '../utils/pinIdentity';
 import { MdCleaningServices, MdFavorite, MdLocationOn, MdPets } from 'react-icons/md';
 import { db } from '../firebase';
 import { summarizeProfileActivity } from '../utils/profileActivity';
@@ -46,8 +47,8 @@ export default function ProfileActivity({ uid }) {
     const [failed, setFailed] = useState(false);
 
     useEffect(() => {
-        function watch(name, ownerField, receive) {
-            const owned = query(collection(db, name), where(ownerField, '==', uid));
+        function watch(name, condition, receive) {
+            const owned = query(collection(db, name), condition);
             return onSnapshot(owned, receive, error => {
                 console.error(`${name} の活動実績を取得できませんでした:`, error);
                 setFailed(true);
@@ -57,9 +58,10 @@ export default function ProfileActivity({ uid }) {
             ...item.data({ serverTimestamps: 'estimate' }),
             id: item.id,
         }));
-        const stopPosts = watch('map_pins', 'ownerUid', snapshot => setPosts(readRows(snapshot)));
-        const stopCleanups = watch('pinCleanups', 'cleanerUid', snapshot => setCleanups(readRows(snapshot)));
-        const stopWalks = watch('walkActions', 'uid', snapshot => setWalkCount(snapshot.size));
+        const ownedPosts = or(where('ownerUid', '==', uid), where('uid', '==', uid));
+        const stopPosts = watch('map_pins', ownedPosts, snapshot => setPosts(readRows(snapshot).filter(post => ownsPin(post, uid))));
+        const stopCleanups = watch('pinCleanups', where('cleanerUid', '==', uid), snapshot => setCleanups(readRows(snapshot)));
+        const stopWalks = watch('walkActions', where('uid', '==', uid), snapshot => setWalkCount(snapshot.size));
         return () => {
             stopPosts();
             stopCleanups();

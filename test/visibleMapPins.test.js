@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { selectVisibleMapPins } from '../src/utils/visibleMapPins.js';
+import { ownsPin, ownReactionIds } from '../src/utils/pinIdentity.js';
 
 const now = Date.UTC(2026, 3, 12, 0);
 const day = 86_400_000;
@@ -50,4 +51,25 @@ test('MyMap keeps private owner records and saved public posts across their life
         ['my-private', 'saved', 'legacy-public-own']);
     assert.deepEqual(select(posts, { activeMapLayer: 'myMap', uid: null }), []);
     assert.deepEqual(select(posts, { recordView: true }), ['saved', 'legacy-public-own', 'other-public']);
+});
+
+test('March uid pins and raw UID saves remain on the personal map without overriding a modern owner', () => {
+    const pins = [
+        { ...base, id: 'legacy-private', uid: 'me', visibility: 'private' },
+        { ...base, id: 'legacy-saved', uid: 'other', savedBy: ['me'] },
+        { ...base, id: 'foreign-private', uid: 'other', visibility: 'private', savedBy: ['me'] },
+        { ...base, id: 'mixed-owner', ownerUid: 'other', uid: 'me', visibility: 'private' },
+        { ...base, id: 'member-only', memberNumber: 1, visibility: 'private' },
+    ];
+    assert.deepEqual(select(pins, { activeMapLayer: 'myMap' }), ['legacy-private', 'legacy-saved']);
+    assert.equal(ownsPin({ ownerUid: null, uid: 'me' }, 'me'), false);
+    assert.equal(ownsPin({ uid: null }, null), false);
+});
+
+test('original and hashed thanks and saves represent one active reaction for the caller', () => {
+    assert.deepEqual(ownReactionIds(['other', 'me'], 'me', 'hash'), ['me']);
+    assert.deepEqual(ownReactionIds(['hash'], 'me', 'hash'), ['hash']);
+    assert.deepEqual(ownReactionIds(['me', 'hash', 'other'], 'me', 'hash'), ['me', 'hash']);
+    assert.deepEqual(ownReactionIds(['other'], 'me', 'hash'), []);
+    assert.deepEqual(ownReactionIds(['other', 'hash'], null, 'hash'), []);
 });

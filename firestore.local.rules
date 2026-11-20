@@ -39,18 +39,39 @@ service cloud.firestore {
             && data.observedAt <= request.time.toMillis() + 300000));
     }
 
+    function ownReactionHash() {
+      // src/utils/hashUtils.js と同じ公開用識別子。旧版の反応には生の UID が残っている。
+      return hashing.sha256('bousai-map-v1' + request.auth.uid).toHexString().lower();
+    }
+
+    function validPinOwner(data) {
+      return data.keys().hasAny(['uid', 'ownerUid'])
+        && data.get('uid', request.auth.uid) == request.auth.uid
+        && data.get('ownerUid', request.auth.uid) == request.auth.uid;
+    }
+
+    function validPinImagePath(data) {
+      let path = data.get('imagePath', null);
+      return path == null || (path is string && (
+        path.matches('map_pins/' + request.auth.uid + '/[^/]+')
+        || (!('ownerUid' in data) && path.matches('map_pins/[0-9]+[.](jpg|jpeg|png|webp)'))
+      ));
+    }
+
     function validMapPinCreate() {
       return request.resource.data.keys().hasOnly([
           'lat', 'lng', 'type', 'title', 'note', 'date', 'timestamp',
           'imageUrl', 'imagePath', 'resolved', 'thanks', 'savedBy',
           'visibility', 'userHash', 'ownerUid', 'pinKind', 'tags',
-          'locationPrecision', 'isLitter', 'observedAt', 'createdAt'
+          'locationPrecision', 'isLitter', 'observedAt', 'createdAt', 'uid', 'memberNumber'
         ])
         && request.resource.data.keys().hasAll([
           'lat', 'lng', 'type', 'title', 'note', 'date', 'timestamp',
-          'resolved', 'thanks', 'savedBy', 'visibility', 'ownerUid'
+          'resolved', 'thanks', 'savedBy', 'visibility'
         ])
-        && request.resource.data.ownerUid == request.auth.uid
+        && validPinOwner(request.resource.data)
+        && (request.resource.data.get('memberNumber', null) == null
+          || (request.resource.data.memberNumber is int && request.resource.data.memberNumber > 0))
         && validCoordinates(request.resource.data)
         && validPinDetails(request.resource.data)
         && request.resource.data.type is string
@@ -73,13 +94,9 @@ service cloud.firestore {
         && (!request.resource.data.keys().hasAll(['imageUrl'])
           || request.resource.data.imageUrl == null
           || request.resource.data.imageUrl is string)
-        && (!request.resource.data.keys().hasAll(['imagePath'])
-          || request.resource.data.imagePath == null
-          || (request.resource.data.imagePath is string
-            && request.resource.data.imagePath.matches('map_pins/' + request.auth.uid + '/.*')))
-        && (!request.resource.data.keys().hasAll(['userHash'])
-          || request.resource.data.userHash == null
-          || request.resource.data.userHash is string);
+        && validPinImagePath(request.resource.data)
+        && (request.resource.data.get('userHash', null) == null
+          || request.resource.data.userHash == ownReactionHash());
     }
 
     function changesOnly(fields) {
@@ -87,11 +104,17 @@ service cloud.firestore {
     }
 
     function validInteraction(field) {
-      return resource.data.visibility == 'public'
-        && request.resource.data[field] is list
-        && request.resource.data[field].size() <= 500
-        && (request.resource.data[field].size() == resource.data[field].size() + 1
-          || request.resource.data[field].size() + 1 == resource.data[field].size());
+      let before = resource.data.get(field, []);
+      let after = request.resource.data[field];
+      let uid = request.auth.uid;
+      let alias = ownReactionHash();
+      let ownIds = [uid, alias];
+      return resource.data.visibility == 'public' && before is list && after is list
+        && ((!before.hasAny(ownIds) && after.size() <= 500
+            && (after == before.concat([uid]) || after == before.concat([alias])))
+          || (after.size() < before.size()
+            && (after == before.removeAll([uid]) || after == before.removeAll([alias])
+              || after == before.removeAll(ownIds))));
     }
 
     function pinPath(id) {
@@ -142,15 +165,15 @@ service cloud.firestore {
     }
 
     match /map_pins/{postId} {
-      allow read: if resource.data.visibility == 'public'
-        || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
+      allow read: if resource.data.visibility == 'public';
+      allow read: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
 
       allow create: if isSignedIn() && validMapPinCreate()
         && !exists(cleanupPath(postId));
 
       allow update: if isSignedIn() && (
-        (resource.data.get('ownerUid', null) == request.auth.uid
-          && request.resource.data.ownerUid == resource.data.ownerUid
+        (validPinOwner(resource.data)
           && resource.data.get('cleanedAt', null) == null
           && changesOnly(['resolved'])
           && request.resource.data.resolved is bool)
@@ -162,7 +185,7 @@ service cloud.firestore {
       );
 
       allow delete: if isSignedIn()
-        && resource.data.ownerUid == request.auth.uid;
+        && validPinOwner(resource.data);
     }
 
     match /pinCleanups/{postId} {
