@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { deleteApp, initializeApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, signInAnonymously } from 'firebase/auth';
 import {
-    arrayRemove, arrayUnion, collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs,
+    and, arrayRemove, arrayUnion, collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocs,
     getFirestore, or, query, serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch,
 } from 'firebase/firestore';
 import { hashUid } from '../src/utils/hashUtils.js';
@@ -82,8 +82,8 @@ try {
     await setDoc(pin(owner, legacyPublic), { ...legacy, title: legacyTitle });
     const currentPrivate = await createPin(owner, 'current-private', { memberNumber: 1, visibility: 'private' });
     const ownFilter = or(where('ownerUid', '==', owner.uid), where('uid', '==', owner.uid));
-    for (const filters of [[ownFilter], [ownFilter, where('visibility', '==', 'private')]]) {
-        const snapshot = await getDocs(query(collection(owner.db, 'map_pins'), ...filters));
+    for (const filter of [ownFilter, and(ownFilter, where('visibility', '==', 'private'))]) {
+        const snapshot = await getDocs(query(collection(owner.db, 'map_pins'), filter));
         assert.ok(snapshot.docs.some(item => item.id === legacyPrivate));
         assert.ok(snapshot.docs.some(item => item.id === currentPrivate));
     }
