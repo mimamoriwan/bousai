@@ -1,4 +1,6 @@
+import assert from 'node:assert/strict';
 import { deleteApp, initializeApp } from 'firebase/app';
+import { hashUid } from '../src/utils/hashUtils.js';
 import { createRequire } from 'node:module';
 import {
     connectAuthEmulator,
@@ -27,8 +29,10 @@ import {
 import {
     connectStorageEmulator,
     deleteObject,
+    getBytes,
     getDownloadURL,
     getStorage,
+    list,
     ref,
     uploadBytes,
 } from 'firebase/storage';
@@ -57,7 +61,7 @@ process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8086';
 const adminApp = initializeAdminApp({ projectId }, `heatmap-admin-${suffix}`);
 const adminDb = getAdminFirestore(adminApp);
 
-const createClient = (name, withAuth = true) => {
+const createClient = (name, withAuth = true, storageOptions) => {
     const app = initializeApp(config, `${name}-${suffix}`);
     const auth = getAuth(app);
     const db = getFirestore(app);
@@ -67,7 +71,7 @@ const createClient = (name, withAuth = true) => {
         connectAuthEmulator(auth, 'http://127.0.0.1:9106', { disableWarnings: true });
     }
     connectFirestoreEmulator(db, '127.0.0.1', 8086);
-    connectStorageEmulator(storage, '127.0.0.1', 9206);
+    connectStorageEmulator(storage, '127.0.0.1', 9206, storageOptions);
 
     return { app, auth, db, storage };
 };
@@ -76,6 +80,8 @@ const owner = createClient('owner');
 const attacker = createClient('attacker');
 const reader = createClient('reader', false);
 const linkGuest = createClient('link-guest');
+// Seed a file left by the March app, which has no owner in the filename.
+const legacyFixture = createClient('legacy-image-fixture', false, { mockUserToken: 'owner' });
 
 const assertRejected = async (label, operation) => {
     try {
@@ -90,7 +96,7 @@ const assertRejected = async (label, operation) => {
     throw new Error(`${label}: 拒否されるべき操作が成功しました。`);
 };
 
-const mapPinData = (uid, visibility) => ({
+const mapPinData = async (uid, visibility) => ({
     lat: 35.6722,
     lng: 139.7364,
     type: 'danger',
@@ -104,16 +110,17 @@ const mapPinData = (uid, visibility) => ({
     thanks: [],
     savedBy: [],
     visibility,
-    userHash: `hash-${uid}`,
+    userHash: await hashUid(uid),
     ownerUid: uid,
 });
 
 let publicPinRef;
 let privatePinRef;
+let privatePhotoPinRef;
 let walkActionRef;
 let invalidWalkActionRef;
 let safetyReportRef;
-let imageRef;
+const imageRefs = [];
 let linkedPrivatePinRef;
 let linkedWalkActionRef;
 const heatmapPeriodId = '2026-W29';
@@ -131,8 +138,8 @@ try {
 
     publicPinRef = doc(owner.db, 'map_pins', `public-${suffix}`);
     privatePinRef = doc(owner.db, 'map_pins', `private-${suffix}`);
-    await setDoc(publicPinRef, mapPinData(ownerUid, 'public'));
-    await setDoc(privatePinRef, mapPinData(ownerUid, 'private'));
+    await setDoc(publicPinRef, await mapPinData(ownerUid, 'public'));
+    await setDoc(privatePinRef, await mapPinData(ownerUid, 'private'));
     console.log('✓ 公開・非公開のゲスト投稿作成');
 
     const publicPin = await getDoc(doc(reader.db, 'map_pins', publicPinRef.id));
@@ -155,12 +162,12 @@ try {
         deleteDoc(doc(attacker.db, 'map_pins', publicPinRef.id))
     );
 
+    const guestHash = await hashUid(attackerUid);
     await updateDoc(doc(attacker.db, 'map_pins', publicPinRef.id), {
-        thanks: arrayUnion(`hash-${attackerUid}`),
+        thanks: arrayUnion(guestHash),
     });
     console.log('✓ ゲストによる「ありがとう」追加');
 
-    const guestHash = `hash-${attackerUid}`;
     await updateDoc(doc(attacker.db, 'map_pins', publicPinRef.id), {
         savedBy: arrayUnion(guestHash),
     });
@@ -303,9 +310,10 @@ try {
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z6C8AAAAASUVORK5CYII=',
         'base64'
     ));
-    imageRef = ref(owner.storage, `map_pins/${ownerUid}/smoke-${suffix}.png`);
+    const imageRef = ref(owner.storage, `map_pins/${ownerUid}/smoke-${suffix}.png`);
+    imageRefs.push(imageRef);
     await uploadBytes(imageRef, onePixelPng, { contentType: 'image/png' });
-    await getDownloadURL(imageRef);
+    await getDownloadURL(ref(reader.storage, imageRef.fullPath));
     console.log('✓ ゲスト画像の本人領域への保存');
 
     await assertRejected('他人の画像領域への保存を拒否', () =>
@@ -315,12 +323,50 @@ try {
             { contentType: 'image/png' }
         )
     );
+    privatePhotoPinRef = doc(owner.db, 'map_pins', `photo-${suffix}`);
+    const privateImage = ref(owner.storage, `private_map_pins/${ownerUid}/${privatePhotoPinRef.id}.jpg`);
+    imageRefs.push(privateImage);
+    await uploadBytes(privateImage, onePixelPng, { contentType: 'image/png' });
+    const privatePhotoPin = {
+        ...await mapPinData(ownerUid, 'private'), pinKind: 'alert', createdAt: serverTimestamp(),
+        imagePath: privateImage.fullPath, imageUrl: null,
+    };
+    await setDoc(privatePhotoPinRef, privatePhotoPin);
+    assert.equal((await getDoc(privatePhotoPinRef)).data().imagePath, privateImage.fullPath);
+    assert.deepEqual(new Uint8Array(await getBytes(privateImage)), onePixelPng);
+    await assertRejected('非公開写真の保存先を公開投稿に指定する操作を拒否', () => setDoc(
+        doc(owner.db, 'map_pins', `public-photo-${suffix}`),
+        { ...privatePhotoPin, visibility: 'public' }
+    ));
+    for (const client of [reader, attacker]) {
+        const otherView = ref(client.storage, privateImage.fullPath);
+        await assertRejected('本人以外の非公開写真の取得を拒否', () => getDownloadURL(otherView));
+        await assertRejected('本人以外の非公開写真の上書きを拒否', () =>
+            uploadBytes(otherView, onePixelPng, { contentType: 'image/png' }));
+        await assertRejected('本人以外の非公開写真の削除を拒否', () => deleteObject(otherView));
+        for (const prefix of ['', imageRef.parent.fullPath, privateImage.parent.fullPath, 'user_photos']) {
+            await assertRejected('ストレージの写真一覧を非公開にする', () => list(ref(client.storage, prefix)));
+        }
+    }
+
+    const legacyImage = ref(legacyFixture.storage, `map_pins/${Date.now()}.jpg`);
+    imageRefs.push(legacyImage);
+    await uploadBytes(legacyImage, onePixelPng, { contentType: 'image/png' });
+    const existingPhotoUrl = await getDownloadURL(legacyImage);
+    for (const client of [reader, attacker]) {
+        await assertRejected('旧形式の写真で第三者によるURL取得を拒否', () =>
+            getDownloadURL(ref(client.storage, legacyImage.fullPath)));
+    }
+    const existingPhoto = await fetch(existingPhotoUrl);
+    assert.equal(existingPhoto.status, 200);
+    assert.deepEqual(new Uint8Array(await existingPhoto.arrayBuffer()), onePixelPng);
+    console.log('✓ 旧投稿に保存済みの写真URLは引き続き表示可能');
 
     const linkGuestCredential = await signInAnonymously(linkGuest.auth);
     const guestUidBeforeLink = linkGuestCredential.user.uid;
     linkedPrivatePinRef = doc(linkGuest.db, 'map_pins', `linked-private-${suffix}`);
     linkedWalkActionRef = doc(linkGuest.db, 'walkActions', `linked-walk-${suffix}`);
-    await setDoc(linkedPrivatePinRef, mapPinData(guestUidBeforeLink, 'private'));
+    await setDoc(linkedPrivatePinRef, await mapPinData(guestUidBeforeLink, 'private'));
     await setDoc(linkedWalkActionRef, {
         uid: guestUidBeforeLink,
         actionType: 'sniff',
@@ -341,6 +387,19 @@ try {
     if (linkedCredential.user.uid !== guestUidBeforeLink || linkedCredential.user.isAnonymous) {
         throw new Error('アカウント連携でゲストUIDが維持されませんでした。');
     }
+    const profileImage = ref(linkGuest.storage, `user_photos/${guestUidBeforeLink}_${Date.now()}.jpg`);
+    imageRefs.push(profileImage);
+    await uploadBytes(profileImage, onePixelPng, { contentType: 'image/png' });
+    await getDownloadURL(profileImage);
+    await linkWithCredential(attackerCredential.user, EmailAuthProvider.credential(
+        `other-photo-owner-${suffix}@example.com`, 'guest-link-test-password'
+    ));
+    for (const client of [reader, attacker]) {
+        const otherView = ref(client.storage, profileImage.fullPath);
+        await assertRejected('第三者によるプロフィール写真の取得を拒否', () => getDownloadURL(otherView));
+        await assertRejected('第三者によるプロフィール写真の上書きを拒否', () =>
+            uploadBytes(otherView, onePixelPng, { contentType: 'image/png' }));
+    }
 
     const [linkedPrivatePin, linkedWalkAction] = await Promise.all([
         getDoc(linkedPrivatePinRef),
@@ -353,13 +412,14 @@ try {
 
     console.log('\nFirebase Emulatorの権限テストはすべて成功しました。');
 } finally {
-    if (imageRef) await deleteObject(imageRef).catch(() => {});
+    await Promise.all(imageRefs.map(image => deleteObject(image).catch(() => {})));
     if (invalidWalkActionRef) await deleteDoc(invalidWalkActionRef).catch(() => {});
     if (safetyReportRef) await deleteDoc(safetyReportRef).catch(() => {});
     if (walkActionRef) await deleteDoc(walkActionRef).catch(() => {});
     if (linkedPrivatePinRef) await deleteDoc(linkedPrivatePinRef).catch(() => {});
     if (linkedWalkActionRef) await deleteDoc(linkedWalkActionRef).catch(() => {});
     if (privatePinRef) await deleteDoc(privatePinRef).catch(() => {});
+    if (privatePhotoPinRef) await deleteDoc(privatePhotoPinRef).catch(() => {});
     if (publicPinRef) await deleteDoc(publicPinRef).catch(() => {});
     await Promise.all([
         adminDb.doc(publicHeatmapPath).delete().catch(() => {}),
@@ -371,6 +431,7 @@ try {
         deleteApp(attacker.app),
         deleteApp(reader.app),
         deleteApp(linkGuest.app),
+        deleteApp(legacyFixture.app),
         deleteAdminApp(adminApp),
     ]);
 }

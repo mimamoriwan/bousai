@@ -1,16 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, storage } from '../firebase';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
 import html2canvas from 'html2canvas';
 import toast from 'react-hot-toast';
 import RouteEditor from '../components/RouteEditor';
+import ProfileActivity from '../components/ProfileActivity';
 
 const Profile = () => {
     const {
         currentUser,
+        memberNumber,
         linkWithGoogle,
         loginWithGoogle,
         loginAnonymously,
@@ -19,9 +21,6 @@ const Profile = () => {
         clearAuthNotice,
     } = useAuth();
 
-    const [userPosts, setUserPosts] = useState([]);
-    const [thanksCount, setThanksCount] = useState(0);
-    const [walkActionCount, setWalkActionCount] = useState(0);
     const [isLoggingIn, setIsLoggingIn] = useState(false);
 
     const [profile, setProfile] = useState(() => {
@@ -90,51 +89,6 @@ const Profile = () => {
             }
         };
         fetchProfile();
-    }, [currentUser]);
-
-    useEffect(() => {
-        const fetchUserPosts = async () => {
-            if (currentUser) {
-                try {
-                    const q = query(collection(db, 'map_pins'), where('ownerUid', '==', currentUser.uid));
-                    const querySnapshot = await getDocs(q);
-                    const posts = [];
-                    let totalThanks = 0;
-                    querySnapshot.forEach((doc) => {
-                        const data = doc.data();
-                        posts.push({ id: doc.id, ...data });
-                        if (data.thanks && data.thanks.length) {
-                            totalThanks += data.thanks.length;
-                        }
-                    });
-                    posts.sort((a, b) => b.timestamp - a.timestamp);
-                    setUserPosts(posts);
-                    setThanksCount(totalThanks);
-                } catch (err) {
-                    console.error("Error fetching user posts:", err);
-                }
-            }
-        };
-        fetchUserPosts();
-    }, [currentUser]);
-
-    useEffect(() => {
-        if (!currentUser) {
-            setWalkActionCount(0);
-            return undefined;
-        }
-
-        const ownWalkActions = query(
-            collection(db, 'walkActions'),
-            where('uid', '==', currentUser.uid)
-        );
-        const unsubscribe = onSnapshot(ownWalkActions, (snapshot) => {
-            setWalkActionCount(snapshot.size);
-        }, (error) => {
-            console.error('Error fetching walk action count:', error);
-        });
-
-        return () => unsubscribe();
     }, [currentUser]);
 
     // MYルート一覧をリアルタイム購読
@@ -811,81 +765,9 @@ const Profile = () => {
                 </button>
             </div>
 
-            {/* みまもり活動実績 */}
-            <div className="card" style={{ marginTop: 'var(--spacing-md)', borderLeft: '4px solid var(--color-primary)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-                    <h3 style={{ margin: 0 }}>みまもり活動実績</h3>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>ACTIVITY</span>
-                </div>
+            <ProfileActivity key={`${currentUser.uid}:${memberNumber ?? ''}`} uid={currentUser.uid}
+                memberNumber={currentUser.isAnonymous ? null : memberNumber} />
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
-                    <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', padding: '12px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🐕</div>
-                        <div style={{ fontSize: '0.8rem', color: '#15803D' }}>お散歩アクション</div>
-                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#15803D' }}>{walkActionCount} <span style={{ fontSize: '0.9rem', color: 'var(--color-text-base)' }}>回</span></div>
-                    </div>
-
-                    <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>🐾</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)' }}>発見したスポット</div>
-                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--color-primary)' }}>{userPosts.length} <span style={{ fontSize: '0.9rem', color: 'var(--color-text-base)' }}>件</span></div>
-                    </div>
-
-                    <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>💖</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)' }}>もらったありがとう</div>
-                        <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#DB2777' }}>{thanksCount} <span style={{ fontSize: '0.9rem', color: 'var(--color-text-base)' }}>件</span></div>
-                    </div>
-                </div>
-            </div>
-
-            {/* わたしの投稿履歴 */}
-            {userPosts.length > 0 && (
-                <div style={{ marginTop: 'var(--spacing-lg)' }}>
-                    <h3 style={{ marginBottom: 'var(--spacing-md)' }}>最近の投稿</h3>
-                    <div style={{ display: 'grid', gap: 'var(--spacing-sm)' }}>
-                        {userPosts.slice(0, 5).map(post => {
-                            return (
-                                <div
-                                    key={post.id}
-                                    className="card"
-                                    style={{
-                                        padding: 'var(--spacing-sm) var(--spacing-md)',
-                                        margin: 0,
-                                        borderLeft: post.type === 'danger' ? '4px solid #F59E0B' : (post.type === 'shelter' ? '4px solid #8B5CF6' : '4px solid #10B981')
-                                    }}
-                                >
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <div style={{ fontWeight: 'bold', color: post.resolved ? '#9CA3AF' : 'inherit', textDecoration: post.resolved ? 'line-through' : 'none', flex: 1, paddingRight: '8px' }}>
-                                                {post.type === 'danger' ? '⚠️' : (post.type === 'shelter' ? '🎒' : '🐾')} {post.title}
-                                            </div>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-sub)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                                                {post.date}
-                                            </div>
-                                        </div>
-
-                                        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-sub)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                            {post.note || '詳細なし'}
-                                        </div>
-
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-sub)' }}>
-                                                {post.imageUrl && <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>📷 写真あり</span>}
-                                            </div>
-                                            <div style={{ fontSize: '0.85rem', color: '#DB2777', fontWeight: 'bold' }}>
-                                                💖 {post.thanks?.length || 0}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-            {/* Logout is now directly below user posts */}
             <button onClick={logout} className="btn" style={{ width: '100%', marginTop: 'var(--spacing-md)', backgroundColor: '#F3F4F6', color: '#4B5563', border: 'none' }}>
                 ログアウト
             </button>
